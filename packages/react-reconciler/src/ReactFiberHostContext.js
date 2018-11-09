@@ -43,7 +43,11 @@ function getRootHostContainer(): Container {
   return rootInstance;
 }
 
+/**
+ * @JSONZ 把各种状态推进栈中，后面可以方便中断恢复等操作
+ */
 function pushHostContainer(fiber: Fiber, nextRootInstance: Container) {
+  // 把current root 实例推到堆栈，这样我们可以在Portal被推出的时候，reset root
   // Push current root instance onto the stack;
   // This allows us to reset root when portals are popped.
   push(rootInstanceStackCursor, nextRootInstance, fiber);

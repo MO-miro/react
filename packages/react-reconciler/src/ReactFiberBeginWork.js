@@ -113,12 +113,17 @@ if (__DEV__) {
   didWarnAboutStatelessRefs = {};
 }
 
+/**
+ * @JSONZ
+ * diff 入口？
+ */
 export function reconcileChildren(
   current: Fiber | null,
   workInProgress: Fiber,
   nextChildren: any,
   renderExpirationTime: ExpirationTime,
 ) {
+  console.log('reconcileChildren', {current, workInProgress, nextChildren, renderExpirationTime});
   if (current === null) {
     // If this is a fresh new component that hasn't been rendered yet, we
     // won't update its child set by applying minimal side-effects. Instead,
@@ -284,11 +289,16 @@ function updateFunctionalComponent(
   return workInProgress.child;
 }
 
+/**
+ * @JSONZ 对于 class Component的情况的处理
+ */
 function updateClassComponent(
   current: Fiber | null,
   workInProgress: Fiber,
   renderExpirationTime: ExpirationTime,
 ) {
+
+  console.log('updateClassComponent');
   // Push context providers early to prevent context stack mismatches.
   // During mounting we don't know the child context yet as the instance doesn't exist.
   // We will invalidate the child context in finishClassComponent() right after rendering.
@@ -300,7 +310,9 @@ function updateClassComponent(
 
   let shouldUpdate;
   if (current === null) {
+    console.log('updateClassComponent 第一次渲染');
     if (workInProgress.stateNode === null) {
+      console.log('updateClassComponent 需要构造实例');
       // In the initial pass we might need to construct the instance.
       constructClassInstance(
         workInProgress,
@@ -311,6 +323,7 @@ function updateClassComponent(
 
       shouldUpdate = true;
     } else {
+      console.log('updateClassComponent 有实例可以用');
       // In a resume, we'll already have an instance we can reuse.
       shouldUpdate = resumeMountClassInstance(
         workInProgress,
@@ -319,6 +332,7 @@ function updateClassComponent(
       );
     }
   } else {
+    console.log('updateClassComponent 已经不是第一次渲染了，所以这次执行的是updateClassInstance 而不是 mount/resumeMount');
     shouldUpdate = updateClassInstance(
       current,
       workInProgress,
@@ -335,6 +349,9 @@ function updateClassComponent(
   );
 }
 
+/**
+ * @JSONZ class component update 的最后一步，执行完一系列的生命周期之后，调用该函数完成 render
+ */
 function finishClassComponent(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -342,6 +359,7 @@ function finishClassComponent(
   hasContext: boolean,
   renderExpirationTime: ExpirationTime,
 ) {
+  console.log('finishClassComponent');
   // Refs should update even if shouldComponentUpdate returns false
   markRef(current, workInProgress);
 
@@ -397,6 +415,7 @@ function finishClassComponent(
       nextChildren = instance.render();
     }
   }
+  console.log('finishClassComponent', { nextChildren });
 
   // React DevTools reads this flag.
   workInProgress.effectTag |= PerformedWork;
@@ -443,7 +462,11 @@ function pushHostRootContext(workInProgress) {
   pushHostContainer(workInProgress, root.containerInfo);
 }
 
+/**
+ * @JSONZ 更新 root
+ */
 function updateHostRoot(current, workInProgress, renderExpirationTime) {
+  console.log('updateHostRoot', { current, workInProgress, renderExpirationTime });
   pushHostRootContext(workInProgress);
   const updateQueue = workInProgress.updateQueue;
   invariant(
@@ -467,6 +490,8 @@ function updateHostRoot(current, workInProgress, renderExpirationTime) {
   // being called "element".
   const nextChildren = nextState.element;
   if (nextChildren === prevChildren) {
+    console.log('updateHostRoot nextChildren === prevChildren 这种又是什么情况? ');
+    debugger;
     // If the state is the same as before, that's a bailout because we had
     // no work that expires at this time.
     resetHydrationState();
@@ -516,6 +541,9 @@ function updateHostRoot(current, workInProgress, renderExpirationTime) {
   return workInProgress.child;
 }
 
+/**
+ * @JSONZ 更新host(dom)组件
+ */
 function updateHostComponent(current, workInProgress, renderExpirationTime) {
   pushHostContext(workInProgress);
 
@@ -940,11 +968,18 @@ function updateContextConsumer(
   }
   */
 
+/**
+ * @JSONZ clone workInProgress.child && workInProgress.child.siblings 防止和current 串了？
+ */
 function bailoutOnAlreadyFinishedWork(
   current: Fiber | null,
   workInProgress: Fiber,
   renderExpirationTime: ExpirationTime,
 ): Fiber | null {
+
+  console.log('bailoutOnAlreadyFinishedWork clonse workInProgress.child && workInProgress.child.siblings');
+
+  // 记录数据函数
   cancelWorkTimer(workInProgress);
 
   if (current !== null) {
@@ -986,11 +1021,15 @@ function memoizeState(workInProgress: Fiber, nextState: any) {
   // is handled by processUpdateQueue.
 }
 
+/**
+ * @JSONZ 开始工作，根据 workInProgress.tag 来分配
+ */
 function beginWork(
   current: Fiber | null,
   workInProgress: Fiber,
   renderExpirationTime: ExpirationTime,
 ): Fiber | null {
+
   if (enableProfilerTimer) {
     if (workInProgress.mode & ProfileMode) {
       markActualRenderTimeStarted(workInProgress);
@@ -998,11 +1037,15 @@ function beginWork(
   }
 
   const updateExpirationTime = workInProgress.expirationTime;
+
+  console.log('beginWork', { tag: workInProgress.tag, current, workInProgress, renderExpirationTime });
+
   if (
     !hasLegacyContextChanged() &&
     (updateExpirationTime === NoWork ||
       updateExpirationTime > renderExpirationTime)
   ) {
+    console.log('beginWork context change 是什么情况下会有 changeContext的操作呢?');
     // This fiber does not have any pending work. Bailout without entering
     // the begin phase. There's still some bookkeeping we that needs to be done
     // in this optimized path, mostly pushing stuff onto the stack.
@@ -1032,6 +1075,8 @@ function beginWork(
         }
         break;
     }
+    // 救助已经完成的工作？
+    console.log('beginWork bailoutOnAlreadyFinishedWork 不懂是什么情况? ');
     return bailoutOnAlreadyFinishedWork(
       current,
       workInProgress,
@@ -1039,9 +1084,11 @@ function beginWork(
     );
   }
 
+  // 在进入开始阶段之前，重置优先级
   // Before entering the begin phase, clear the expiration time.
   workInProgress.expirationTime = NoWork;
 
+  // ! 重点 根据创建fiber的时候的tag来确定要做什么操作， 基本都是传入一个当前组件 && 一个备份 && 一个优先级
   switch (workInProgress.tag) {
     case IndeterminateComponent:
       return mountIndeterminateComponent(
@@ -1109,3 +1156,4 @@ function beginWork(
 }
 
 export {beginWork};
+

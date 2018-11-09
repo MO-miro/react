@@ -82,13 +82,20 @@ if (__DEV__) {
   didWarnAboutNestedUpdates = false;
 }
 
+/**
+ * @JSONZ
+ * 获取子树上下文
+ */
 function getContextForSubtree(
   parentComponent: ?React$Component<any, any>,
 ): Object {
+  console.log('getContextForSubtree root组件会返回emptyContextObject');
+  // 如果没有父组件，则是一个空的obj （既root组件)
   if (!parentComponent) {
     return emptyContextObject;
   }
-
+  console.log('getContextForSubtree 有parentComponent的情况还没遇到过');
+  debugger;
   const fiber = ReactInstanceMap.get(parentComponent);
   const parentContext = findCurrentUnmaskedContext(fiber);
   return isContextProvider(fiber)
@@ -96,12 +103,19 @@ function getContextForSubtree(
     : parentContext;
 }
 
+/**
+ * @JSONZ
+ * root 调度更新方法
+ */
 function scheduleRootUpdate(
   current: Fiber,
   element: ReactNodeList,
   expirationTime: ExpirationTime,
   callback: ?Function,
 ) {
+  console.log('scheduleRootUpdate', {
+    current, element, expirationTime,
+  });
   if (__DEV__) {
     if (
       ReactCurrentFiber.phase === 'render' &&
@@ -120,11 +134,13 @@ function scheduleRootUpdate(
     }
   }
 
+  // 传入执行优先级创建一个update对象
   const update = createUpdate(expirationTime);
   // Caution: React DevTools currently depends on this property
   // being called "element".
   update.payload = {element};
 
+  // 这里的cb 一般是 commit 提交的步骤
   callback = callback === undefined ? null : callback;
   if (callback !== null) {
     warningWithoutStack(
@@ -135,8 +151,12 @@ function scheduleRootUpdate(
     );
     update.callback = callback;
   }
+
+  // 进入更新队列咯
+  // 把要更新的东西丢到更新队列里面
   enqueueUpdate(current, update);
 
+  // 调度工作
   scheduleWork(current, expirationTime);
   return expirationTime;
 }
@@ -163,13 +183,17 @@ export function updateContainerAtExpirationTime(
     }
   }
 
+  // @JSONZ 获取子树的上下文
   const context = getContextForSubtree(parentComponent);
+
+  // @JSONZ 更新上下文，当前没有执行就更新当前上下文，否则丢到待处理的上下文
   if (container.context === null) {
     container.context = context;
   } else {
     container.pendingContext = context;
   }
 
+  // 调度 root 更新
   return scheduleRootUpdate(current, element, expirationTime, callback);
 }
 
@@ -208,8 +232,19 @@ export function updateContainer(
   callback: ?Function,
 ): ExpirationTime {
   const current = container.current;
+  // 获取当前的时间
   const currentTime = requestCurrentTime();
+
+  // 计算fiber处理的优先级 里面根据各种优先级去处理返回，比如sync interactive async
   const expirationTime = computeExpirationForFiber(currentTime, current);
+
+  /**
+   * @JSONZ 在时间到期内更新容器
+   * element => React Element
+   * container => 容器 Fiber Root
+   * expirationTim=> 工作的优先级
+   * callback => emmmmm
+   */
   return updateContainerAtExpirationTime(
     element,
     container,

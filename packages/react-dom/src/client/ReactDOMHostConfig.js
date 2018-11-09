@@ -342,10 +342,14 @@ export function appendChild(
   parentInstance.appendChild(child);
 }
 
+/**
+ * @JSONZ 执行effect，在container加入childDom
+ */
 export function appendChildToContainer(
   container: Container,
   child: Instance | TextInstance,
 ): void {
+  console.log('appendChildToContainer', {container, child});
   if (container.nodeType === COMMENT_NODE) {
     (container.parentNode: any).insertBefore(child, container);
   } else {

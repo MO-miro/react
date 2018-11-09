@@ -340,6 +340,7 @@ ReactRoot.prototype.render = function(
   children: ReactNodeList,
   callback: ?() => mixed,
 ): Work {
+  // @JSONZ root render 根目录render函数
   const root = this._internalRoot;
   const work = new ReactWork();
   callback = callback === undefined ? null : callback;
@@ -349,6 +350,7 @@ ReactRoot.prototype.render = function(
   if (callback !== null) {
     work.then(callback);
   }
+  // @JSONZ 更新容器
   DOMRenderer.updateContainer(children, root, null, work._onCommit);
   return work;
 };
@@ -454,6 +456,11 @@ ReactGenericBatching.injection.injectRenderer(DOMRenderer);
 
 let warnedAboutHydrateAPI = false;
 
+/**
+ * @JSONZ 创建一个 React render root
+ * 这里先判断是否需要保留原有的东西，不需要的话，就直接把 container(DOM) 清空
+ * 默认把Async渲染开关按掉， 暂时都用同步的方法
+ */
 function legacyCreateRootFromDOMContainer(
   container: DOMContainer,
   forceHydrate: boolean,
@@ -495,10 +502,12 @@ function legacyCreateRootFromDOMContainer(
     }
   }
   // Legacy roots are not async by default.
+  // @JSONZ 这里强制使用同步，开关控制
   const isAsync = false;
   return new ReactRoot(container, isAsync, shouldHydrate);
 }
 
+// @JSONZ legacy render subtree into container
 function legacyRenderSubtreeIntoContainer(
   parentComponent: ?React$Component<any, any>,
   children: ReactNodeList,
@@ -520,6 +529,7 @@ function legacyRenderSubtreeIntoContainer(
   // member of intersection type." Whyyyyyy.
   let root: Root = (container._reactRootContainer: any);
   if (!root) {
+    console.log('legacyRenderSubtreeIntoContainer 第一次渲染，没有container._reactRootContainer');
     // Initial mount
     root = container._reactRootContainer = legacyCreateRootFromDOMContainer(
       container,
@@ -528,6 +538,8 @@ function legacyRenderSubtreeIntoContainer(
     if (typeof callback === 'function') {
       const originalCallback = callback;
       callback = function() {
+        // 这里调用callback 先获取 public root Instance 然后再传入callback
+        console.log('legacyRenderSubtreeIntoContainer callback 这里会先获取实例再调用callback')
         const instance = DOMRenderer.getPublicRootInstance(root._internalRoot);
         originalCallback.call(instance);
       };
@@ -535,6 +547,8 @@ function legacyRenderSubtreeIntoContainer(
     // Initial mount should not be batched.
     DOMRenderer.unbatchedUpdates(() => {
       if (parentComponent != null) {
+        debugger;
+        // 不知道这条路是什么情况
         root.legacy_renderSubtreeIntoContainer(
           parentComponent,
           children,
@@ -545,6 +559,7 @@ function legacyRenderSubtreeIntoContainer(
       }
     });
   } else {
+    console.log('legacyRenderSubtreeIntoContainer 第二次渲染');
     if (typeof callback === 'function') {
       const originalCallback = callback;
       callback = function() {
@@ -623,18 +638,26 @@ const ReactDOM: Object = {
     );
   },
 
+  /**
+   * @JSONZ ReactDOM.render 方法
+   */
   render(
     element: React$Element<any>,
     container: DOMContainer,
     callback: ?Function,
   ) {
-    return legacyRenderSubtreeIntoContainer(
+    console.log('render 函数', {element, container, callback});
+    debugger;
+
+    const _returnVal = legacyRenderSubtreeIntoContainer(
       null,
       element,
       container,
       false,
       callback,
     );
+    console.log('render 函数执行完成');
+    return _returnVal;
   },
 
   unstable_renderSubtreeIntoContainer(

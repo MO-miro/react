@@ -132,6 +132,9 @@ export type UpdateQueue<State> = {
   lastCapturedEffect: Update<State> | null,
 };
 
+/**
+ * @JSONZ update.tag 根据tag来判断是要做一些什么更新操作
+ */
 export const UpdateState = 0;
 export const ReplaceState = 1;
 export const ForceUpdate = 2;
@@ -190,6 +193,14 @@ function cloneUpdateQueue<State>(
   return queue;
 }
 
+/**
+ * @JSONZ
+ * TAG
+export const UpdateState = 0;
+export const ReplaceState = 1;
+export const ForceUpdate = 2;
+export const CaptureUpdate = 3;
+ */
 export function createUpdate(expirationTime: ExpirationTime): Update<*> {
   return {
     expirationTime: expirationTime,
@@ -203,10 +214,14 @@ export function createUpdate(expirationTime: ExpirationTime): Update<*> {
   };
 }
 
+/**
+ * @JSONZ 将 update 添加到 queue 中
+ */
 function appendUpdateToQueue<State>(
   queue: UpdateQueue<State>,
   update: Update<State>,
 ) {
+  // @JSONZ 如果lastUpdate is null 意味着这是最后的一个更新，队列是空的
   // Append the update to the end of the list.
   if (queue.lastUpdate === null) {
     // Queue is empty
@@ -217,15 +232,31 @@ function appendUpdateToQueue<State>(
   }
 }
 
+/**
+ * @JSONZ 把update Object推到 更新队列
+ */
 export function enqueueUpdate<State>(fiber: Fiber, update: Update<State>) {
+  console.log('enqueueUpdate 把update对象推进更新队列 ', {fiber, update });
+  // 更新队列创建是懒惰的？ 懒惰的创建更新队列 不理解
   // Update queues are created lazily.
+
+  /**
+   * ? @JSONZ 为什么要维持两个更新队列咧
+   * 一个用来执行更新，另一个用来备份？
+   * 如果有更高优先级的打断了，可以重新来过？ 还是在中断的地方继续开始
+   * @JSONZ_TODO 更新队列 可以深究一下其他几种情况是什么时候触发
+   */
   const alternate = fiber.alternate;
   let queue1;
   let queue2;
+
+  // 如果这个 fiber 没有过备份，意味着没有执行过更新，所以没有目前更新队列
   if (alternate === null) {
     // There's only one fiber.
+    console.log('enqueueUpdate 只有一个fiber的情况, 什么情况会有两个呢？');
     queue1 = fiber.updateQueue;
     queue2 = null;
+    // 如果跟新队列为空的 创建一个丢到 queue1
     if (queue1 === null) {
       queue1 = fiber.updateQueue = createUpdateQueue(fiber.memoizedState);
     }
@@ -233,6 +264,7 @@ export function enqueueUpdate<State>(fiber: Fiber, update: Update<State>) {
     // There are two owners.
     queue1 = fiber.updateQueue;
     queue2 = alternate.updateQueue;
+    console.log('enqueueUpdate 不是第一次render，而是update的情况； queue1 是待更新的队列， queue2 是旧的更新队列', {queue1, queue2});
     if (queue1 === null) {
       if (queue2 === null) {
         // Neither fiber has an update queue. Create new ones.
@@ -242,6 +274,7 @@ export function enqueueUpdate<State>(fiber: Fiber, update: Update<State>) {
         );
       } else {
         // Only one fiber has an update queue. Clone to create a new one.
+        // @JSONZ 一个对象维护的队列...
         queue1 = fiber.updateQueue = cloneUpdateQueue(queue2);
       }
     } else {
@@ -254,6 +287,8 @@ export function enqueueUpdate<State>(fiber: Fiber, update: Update<State>) {
     }
   }
   if (queue2 === null || queue1 === queue2) {
+    console.log('enqueueUpdate 只有一条队列的情况，把更新的事件推到这个队列里面');
+    // @JSONZ 只有一个单一的队列的情况 把更新事件加到队列一
     // There's only a single queue.
     appendUpdateToQueue(queue1, update);
   } else {
@@ -323,12 +358,16 @@ export function enqueueCapturedUpdate<State>(
   }
 }
 
+/**
+ * @JSONZ 保证当前工作的队列有一个克隆版本
+ */
 function ensureWorkInProgressQueueIsAClone<State>(
   workInProgress: Fiber,
   queue: UpdateQueue<State>,
 ): UpdateQueue<State> {
   const current = workInProgress.alternate;
   if (current !== null) {
+    // 如果正在工作的队列等于当前的队列，我们需要先克隆他
     // If the work-in-progress queue is equal to the current queue,
     // we need to clone it first.
     if (queue === current.updateQueue) {
@@ -338,6 +377,10 @@ function ensureWorkInProgressQueueIsAClone<State>(
   return queue;
 }
 
+/**
+ * @JSONZ 从更新事件中获取状态
+ * 这里其实就是把多个 state 合并到一个，再一次性更新。属于React的一个优化
+ */
 function getStateFromUpdate<State>(
   workInProgress: Fiber,
   queue: UpdateQueue<State>,
@@ -346,6 +389,8 @@ function getStateFromUpdate<State>(
   nextProps: any,
   instance: any,
 ): any {
+  // @JSONZ_TODO
+  console.log('getStateFromUpdate 这里看一下是怎么会返回一个 {element }');
   switch (update.tag) {
     case ReplaceState: {
       const payload = update.payload;
@@ -384,6 +429,7 @@ function getStateFromUpdate<State>(
             payload.call(instance, prevState, nextProps);
           }
         }
+        // setState(function) 的情况
         partialState = payload.call(instance, prevState, nextProps);
       } else {
         // Partial state object
@@ -404,6 +450,9 @@ function getStateFromUpdate<State>(
   return prevState;
 }
 
+/**
+ * @JSONZ 处理更新队列
+ */
 export function processUpdateQueue<State>(
   workInProgress: Fiber,
   queue: UpdateQueue<State>,
@@ -411,8 +460,13 @@ export function processUpdateQueue<State>(
   instance: any,
   renderExpirationTime: ExpirationTime,
 ): void {
+  console.log('processUpdateQueue');
+  debugger;
   hasForceUpdate = false;
 
+  // 确保工作的队列是一个克隆的，（方便暂停等操作
+  // 里面的工作是如果当前工作的队列和工作队列一样，既 current.queue === queue。
+  // 则把当前队列克隆到工作队列里面
   queue = ensureWorkInProgressQueueIsAClone(workInProgress, queue);
 
   if (__DEV__) {
@@ -424,17 +478,23 @@ export function processUpdateQueue<State>(
   let newFirstUpdate = null;
   let newExpirationTime = NoWork;
 
+  // 遍历更新队列
   // Iterate through the list of updates to compute the result.
   let update = queue.firstUpdate;
   let resultState = newBaseState;
   while (update !== null) {
     const updateExpirationTime = update.expirationTime;
     if (updateExpirationTime > renderExpirationTime) {
+      console.log('processUpdateQueue 没有足够高优先级的情况 这里考虑下，没有足够高优先级处理方式是什么呢？');
+      debugger;
+      // 这个更新没有足够的优先级，跳过他
       // This update does not have sufficient priority. Skip it.
       if (newFirstUpdate === null) {
+        // 这是第一个被跳过的更新，处于更新队列的第一个更新
         // This is the first skipped update. It will be the first update in
         // the new list.
         newFirstUpdate = update;
+        // 第一次跳过的更新，所以当前的结果是最新的 base state
         // Since this is the first update that was skipped, the current result
         // is the new base state.
         newBaseState = resultState;
@@ -448,6 +508,7 @@ export function processUpdateQueue<State>(
         newExpirationTime = updateExpirationTime;
       }
     } else {
+      // 有足够高优先级的更新，执行 && 计算新的结果
       // This update does have sufficient priority. Process it and compute
       // a new result.
       resultState = getStateFromUpdate(
@@ -479,6 +540,8 @@ export function processUpdateQueue<State>(
   let newFirstCapturedUpdate = null;
   update = queue.firstCapturedUpdate;
   while (update !== null) {
+    console.log('processUpdateQueue firstCapturedUpdate 这又是啥子？');
+    console.log('好像报错的时候才会执行到这里');
     const updateExpirationTime = update.expirationTime;
     if (updateExpirationTime > renderExpirationTime) {
       // This update does not have sufficient priority. Skip it.
@@ -536,6 +599,7 @@ export function processUpdateQueue<State>(
     workInProgress.effectTag |= Callback;
   }
   if (newFirstUpdate === null && newFirstCapturedUpdate === null) {
+    // 我们处理了每个更新，没有跳过的。这意味着新的基本状态和结果状态一直
     // We processed every update, without skipping. That means the new base
     // state is the same as the result state.
     newBaseState = resultState;
@@ -545,6 +609,7 @@ export function processUpdateQueue<State>(
   queue.firstUpdate = newFirstUpdate;
   queue.firstCapturedUpdate = newFirstCapturedUpdate;
 
+  // 不知所云，不过看到了 shouldComponentUpdate
   // Set the remaining expiration time to be whatever is remaining in the queue.
   // This should be fine because the only two other things that contribute to
   // expiration time are props and context. We're already in the middle of the
@@ -584,6 +649,7 @@ export function commitUpdateQueue<State>(
   instance: any,
   renderExpirationTime: ExpirationTime,
 ): void {
+  console.log('commitUpdateQueue', {finishedWork, finishedQueue, instance, renderExpirationTime});
   // If the finished render included captured updates, and there are still
   // lower priority updates left over, we need to keep the captured updates
   // in the queue so that they are rebased and not dropped once we process the

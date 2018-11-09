@@ -16,17 +16,28 @@ import {NoWork} from './ReactFiberExpirationTime';
 // suspended inside an offscreen subtree should be able to ping at the priority
 // of the outer render.
 
+/**
+ * @JSONZ 标识待处理事件的优先级
+ */
 export function markPendingPriorityLevel(
   root: FiberRoot,
   expirationTime: ExpirationTime,
 ): void {
+  console.log('markPendingPriorityLevel',{ root, expirationTime});
+  // 在完成一次失败的根和重试他之间，可能会额外的调度其他更新。?
+  // 如果其他更新可以修复这个错误，则清除 didError
+  // 在一次rootWork调度失败然后尝试的时候，可能会有其他额外的调度更新，如果其他的更新可以修复这个root failed，则清除didError
+  // 还是不知所云
+
   // If there's a gap between completing a failed root and retrying it,
   // additional updates may be scheduled. Clear `didError`, in case the update
   // is sufficient to fix the error.
   root.didError = false;
 
+  // @JSONZ 更新时间
   // Update the latest and earliest pending times
   const earliestPendingTime = root.earliestPendingTime;
+  // 如果最早的待处理时间为 NoWork 则意味着没有其他需要处理的更新
   if (earliestPendingTime === NoWork) {
     // No other pending updates.
     root.earliestPendingTime = root.latestPendingTime = expirationTime;
@@ -37,7 +48,7 @@ export function markPendingPriorityLevel(
     } else {
       const latestPendingTime = root.latestPendingTime;
       if (latestPendingTime < expirationTime) {
-        // This is the latest pending update
+        //  This is the latest pending update
         root.latestPendingTime = expirationTime;
       }
     }
@@ -242,17 +253,24 @@ export function findEarliestOutstandingPriorityLevel(
   return earliestExpirationTime;
 }
 
+/**
+ * @JSONZ 获取下一个工作的优先级， and 下一个优先级to work on
+ */
 function findNextExpirationTimeToWorkOn(completedExpirationTime, root) {
+  console.log('findNextExpirationTimeToWorkOn', {completedExpirationTime, root});
   const earliestSuspendedTime = root.earliestSuspendedTime;
   const latestSuspendedTime = root.latestSuspendedTime;
   const earliestPendingTime = root.earliestPendingTime;
   const latestPingedTime = root.latestPingedTime;
 
+  // 如果可以的话，就在最早待处理时间去 work，否则就最晚待处理时间。
   // Work on the earliest pending time. Failing that, work on the latest
   // pinged time.
   let nextExpirationTimeToWorkOn =
     earliestPendingTime !== NoWork ? earliestPendingTime : latestPingedTime;
 
+  // 下面这段无法理解
+  // 如果没有待处理或针对性的工作，可以检查一下比目前完成任务更低优先级的或者暂停了的活动
   // If there is no pending or pinted work, check if there's suspended work
   // that's lower priority than what we just completed.
   if (
@@ -260,6 +278,7 @@ function findNextExpirationTimeToWorkOn(completedExpirationTime, root) {
     (completedExpirationTime === NoWork ||
       latestSuspendedTime > completedExpirationTime)
   ) {
+    // 最低优先级的工作是最有可能下次提交？ 让我们再次render他，所以如果超时，我们就可以准备提交？ 奇奇怪怪的
     // The lowest priority suspended work is the work most likely to be
     // committed next. Let's start rendering it again, so that if it times out,
     // it's ready to commit.
@@ -272,6 +291,7 @@ function findNextExpirationTimeToWorkOn(completedExpirationTime, root) {
     earliestSuspendedTime !== NoWork &&
     earliestSuspendedTime < expirationTime
   ) {
+    // 使用最早的已知的过期时间
     // Expire using the earliest known expiration time.
     expirationTime = earliestSuspendedTime;
   }

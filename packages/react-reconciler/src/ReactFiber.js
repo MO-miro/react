@@ -254,6 +254,10 @@ function FiberNode(
   }
 }
 
+
+/**
+ * ! @JSONZ tag => ReactTypeOfWork
+ */
 // This is a constructor function, rather than a POJO constructor, still
 // please ensure we do the following:
 // 1) Nobody should add any instance methods on this. Instance methods can be
@@ -281,6 +285,9 @@ function shouldConstruct(Component) {
   return !!(Component.prototype && Component.prototype.isReactComponent);
 }
 
+/**
+ * ! @JSONZ 创建正在运行的work 相当于copy一个 current 然后各自备份指向对方
+ */
 // This is used to create an alternate fiber to do work on.
 export function createWorkInProgress(
   current: Fiber,
@@ -289,6 +296,10 @@ export function createWorkInProgress(
 ): Fiber {
   let workInProgress = current.alternate;
   if (workInProgress === null) {
+    // 使用双缓冲池技术~ 因为我们知道我们最多只需要一棵树的两个版本
+    // 我们收集我们可以自由重用的其他未使用的节点
+    // 这是懒惰创建的，避免为永不更新的事件分配多余的对象。
+    // 如果需要，它允许我们回收额外的内存
     // We use a double buffering pooling technique because we know that we'll
     // only ever need at most two versions of a tree. We pool the "other" unused
     // node that we're free to reuse. This is lazily created to avoid allocating
@@ -310,6 +321,7 @@ export function createWorkInProgress(
       workInProgress._debugOwner = current._debugOwner;
     }
 
+    // 互相扯备份 23333
     workInProgress.alternate = current;
     current.alternate = workInProgress;
   } else {
@@ -334,12 +346,15 @@ export function createWorkInProgress(
     }
   }
 
+  // 不要触及子树的到期时间，该时间没有改变。 ? 什么鬼
   // Don't touching the subtree's expiration time, which has not changed.
   workInProgress.childExpirationTime = current.childExpirationTime;
   if (pendingProps !== current.pendingProps) {
+    console.log('createWorkInProgress fiber 有了新的props 要处理, 改workInProgress.expirationTime 为 ' + expirationTime);
     // This fiber has new props.
     workInProgress.expirationTime = expirationTime;
   } else {
+    // fiber prop 没有更改
     // This fiber's props have not changed.
     workInProgress.expirationTime = current.expirationTime;
   }

@@ -26,11 +26,11 @@ import {
 } from './ReactElement';
 import {createContext} from './ReactContext';
 import forwardRef from './forwardRef';
-import {
-  createElementWithValidation,
-  createFactoryWithValidation,
-  cloneElementWithValidation,
-} from './ReactElementValidator';
+// import {
+//   createElementWithValidation,
+//   createFactoryWithValidation,
+//   cloneElementWithValidation,
+// } from './ReactElementValidator';
 import ReactSharedInternals from './ReactSharedInternals';
 
 const React = {
@@ -54,9 +54,12 @@ const React = {
   unstable_AsyncMode: REACT_ASYNC_MODE_TYPE,
   unstable_Profiler: REACT_PROFILER_TYPE,
 
-  createElement: __DEV__ ? createElementWithValidation : createElement,
-  cloneElement: __DEV__ ? cloneElementWithValidation : cloneElement,
-  createFactory: __DEV__ ? createFactoryWithValidation : createFactory,
+  // createElement: __DEV__ ? createElementWithValidation : createElement,
+  // cloneElement: __DEV__ ? cloneElementWithValidation : cloneElement,
+  // createFactory: __DEV__ ? createFactoryWithValidation : createFactory,
+  createElement: createElement,
+  cloneElement: cloneElement,
+  createFactory: createFactory,
   isValidElement: isValidElement,
 
   version: ReactVersion,

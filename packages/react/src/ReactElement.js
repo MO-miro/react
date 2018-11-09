@@ -167,8 +167,13 @@ const ReactElement = function(type, key, ref, self, source, owner, props) {
 /**
  * Create and return a new ReactElement of the given type.
  * See https://reactjs.org/docs/react-api.html#createelement
+ * @JSONZ 这里做的转换是babel帮忙把jsx转为一组函数，传进 createElement，把jsx转为ReactElement
  */
 export function createElement(type, config, children) {
+  // @JSONZ_TODO 这里应该可以做一层小优化? 合并 string && number children?
+  console.log('createElement', {
+    type, config, children: Array.from(arguments).splice(2),
+  });
   let propName;
 
   // Reserved names are extracted

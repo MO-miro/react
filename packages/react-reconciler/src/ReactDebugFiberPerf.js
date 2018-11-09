@@ -222,12 +222,15 @@ export function recordEffect(): void {
   }
 }
 
+// @JSONZ 记录调度更新
 export function recordScheduleUpdate(): void {
+  // @JSONZ 应用user timing api
   if (enableUserTimingAPI) {
     if (isCommitting) {
       hasScheduledUpdateInCurrentCommit = true;
     }
     if (
+      // @JSONZ 当前阶段
       currentPhase !== null &&
       currentPhase !== 'componentWillMount' &&
       currentPhase !== 'componentWillReceiveProps'
@@ -350,6 +353,9 @@ export function stopPhaseTimer(): void {
   }
 }
 
+/**
+ * @JSONZ 启动工作循环计时器（开始工作循环timer 哈哈哈哈 这他娘的理解能力）
+ */
 export function startWorkLoopTimer(nextUnitOfWork: Fiber | null): void {
   if (enableUserTimingAPI) {
     currentFiber = nextUnitOfWork;

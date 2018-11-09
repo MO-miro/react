@@ -120,6 +120,7 @@
     "flow-ci": "node ./scripts/tasks/flow-ci.js",
     "prettier": "node ./scripts/prettier/index.js write-changed",
     "prettier-all": "node ./scripts/prettier/index.js write",
-    "version-check": "node ./scripts/tasks/version-check.js"
+    "version-check": "node ./scripts/tasks/version-check.js",
+    "jsonz-build": "yarn build core,dom --type=UMD --jsonz"
   }
 }

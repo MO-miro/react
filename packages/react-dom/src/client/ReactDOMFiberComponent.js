@@ -243,6 +243,9 @@ function trapClickOnNonInteractiveElement(node: HTMLElement) {
   node.onclick = noop;
 }
 
+/**
+ * @JSONZ 这里面对dom的 prop做初始化处理，比如 children style 等等
+ */
 function setInitialDOMProperties(
   tag: string,
   domElement: Element,
@@ -250,6 +253,7 @@ function setInitialDOMProperties(
   nextProps: Object,
   isCustomComponentTag: boolean,
 ): void {
+  console.log('setInitialDOMProperties 对dom的prop做初始化处理， children, style, click event 等等');
   for (const propKey in nextProps) {
     if (!nextProps.hasOwnProperty(propKey)) {
       continue;

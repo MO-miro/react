@@ -82,6 +82,10 @@ function markRef(workInProgress: Fiber) {
   workInProgress.effectTag |= Ref;
 }
 
+/**
+ * @JSONZ 这一步递归将所有处理好的 statNode(真实dom) append到parent(return)
+ * node.return.appendChild(node.statNode) && node.siblings.return = node.return && node = node.siblings
+ */
 function appendAllChildren(parent: Instance, workInProgress: Fiber) {
   // We only have the top Fiber that was created but we need recurse down its
   // children to find all the terminal nodes.

@@ -339,7 +339,11 @@ function ChildReconciler(shouldTrackSideEffects) {
     }
   }
 
+  /**
+  * @JSONZ 替换单一子节点 传入子fiber
+  */
   function placeSingleChild(newFiber: Fiber): Fiber {
+    console.log('placeSingleChild', {newFiber});
     // This is simpler for the single child case. We only need to do a
     // placement for inserting new children.
     if (shouldTrackSideEffects && newFiber.alternate === null) {
@@ -729,12 +733,18 @@ function ChildReconciler(shouldTrackSideEffects) {
     return knownKeys;
   }
 
+  /**
+   * @JSONZ
+   * 数组的diff (children Array || React16 新特性)
+   * @JSONZ_TODO 可以展开
+   */
   function reconcileChildrenArray(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
     newChildren: Array<*>,
     expirationTime: ExpirationTime,
   ): Fiber | null {
+    console.log('reconcileChildrenArray', {returnFiber, currentFirstChild, newChildren, expirationTime});
     // This algorithm can't optimize by searching from boths ends since we
     // don't have backpointers on fibers. I'm trying to see how far we can get
     // with that model. If it ends up not being worth the tradeoffs, we can
@@ -821,6 +831,7 @@ function ChildReconciler(shouldTrackSideEffects) {
       return resultingFirstChild;
     }
 
+    // 如果没有老的 fiber 我们可以直接插入新的fiber
     if (oldFiber === null) {
       // If we don't have any more existing children we can choose a fast path
       // since the rest will all be insertions.
@@ -844,6 +855,8 @@ function ChildReconciler(shouldTrackSideEffects) {
       }
       return resultingFirstChild;
     }
+    console.log('reconcileChildrenArray array diff');
+    debugger;
 
     // Add all children to a key map for quick lookups.
     const existingChildren = mapRemainingChildren(returnFiber, oldFiber);
@@ -1105,15 +1118,26 @@ function ChildReconciler(shouldTrackSideEffects) {
     return created;
   }
 
+/**
+ * @JSONZ 协调(调和)单一的React Element
+ */
   function reconcileSingleElement(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
     element: ReactElement,
     expirationTime: ExpirationTime,
   ): Fiber {
+    console.log('reconcileSingleElement', {returnFiber, element, currentFirstChild, expirationTime});
+
     const key = element.key;
     let child = currentFirstChild;
     while (child !== null) {
+      console.log(`
+        reconcileSingleElement currentFirstChild !== null 意味着不是第一次渲染，而是 update 的情况。
+        所以会进行diff key 不同(默认不设置key的情况下是 null === null)直接执行 delete，然后 child 改为 child.sibling。
+        如果key === key ，则判断 type 是否相同(div、p、h1等等) 则直接 deleteRemainingChild 然后退出？
+        否则,执行 deleteRemainingChild(为什么要有这一步呢)，然后拷贝现有的fiber，更新state&&props然后返回出去
+      `);
       // TODO: If key === null and child.key === null, then this only applies to
       // the first item in the list.
       if (child.key === key) {
@@ -1212,6 +1236,14 @@ function ChildReconciler(shouldTrackSideEffects) {
     return created;
   }
 
+  /**
+   * @JSONZ
+   * 根据不同的 newChild 类型调用不同的方法
+   * 元素 REACT_ELEMENT || REACT_PORTAL
+   * 数组 ARRAY
+   * STRING
+   * null
+   */
   // This API will tag the children with the side-effect of the reconciliation
   // itself. They will be added to the side-effect list as we pass through the
   // children and the parent.
@@ -1252,6 +1284,7 @@ function ChildReconciler(shouldTrackSideEffects) {
               expirationTime,
             ),
           );
+        // PORTAL
         case REACT_PORTAL_TYPE:
           return placeSingleChild(
             reconcileSinglePortal(
@@ -1375,3 +1408,4 @@ export function cloneChildFibers(
   }
   newChild.sibling = null;
 }
+

@@ -182,9 +182,15 @@ export function trapCapturedEvent(
 }
 
 function dispatchInteractiveEvent(topLevelType, nativeEvent) {
+  if (topLevelType === 'click') {
+    debugger;
+  }
   interactiveUpdates(dispatchEvent, topLevelType, nativeEvent);
 }
 
+/**
+ * @JSONZ React Event dispatch Event
+ */
 export function dispatchEvent(
   topLevelType: DOMTopLevelEventType,
   nativeEvent: AnyNativeEvent,
@@ -194,7 +200,9 @@ export function dispatchEvent(
   }
 
   const nativeEventTarget = getEventTarget(nativeEvent);
+  console.log('dispatchEvent 调用getEventTarget 获取 nativeEventTarget', {nativeEventTarget});
   let targetInst = getClosestInstanceFromNode(nativeEventTarget);
+  console.log('dispatchEvent 调用 getClosestInstanceFromNode 获取 targetInst(fiberNode)', {targetInst});
   if (
     targetInst !== null &&
     typeof targetInst.tag === 'number' &&

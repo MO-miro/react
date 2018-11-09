@@ -7,6 +7,9 @@
  * @flow
  */
 
+/**
+ * @JSONZ JSONZ-effectTag effectTag: react 副作用(effect)类型
+ */
 export type TypeOfSideEffect = number;
 
 // Don't change these two values. They're used by React Dev Tools.

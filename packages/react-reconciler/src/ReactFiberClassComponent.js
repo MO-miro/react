@@ -79,7 +79,9 @@ if (__DEV__) {
     if (callback === null || typeof callback === 'function') {
       return;
     }
-    const key = `${callerName}_${(callback: any)}`;
+    // @JSONZ 修改了一下，不然vscode 傻逼比的不解析
+    // const key = `${callerName}_${(callback: any)}`;
+    const key = `${callerName}_${callback}`;
     if (!didWarnOnInvalidCallback.has(key)) {
       didWarnOnInvalidCallback.add(key);
       warningWithoutStack(
@@ -129,12 +131,16 @@ if (__DEV__) {
   Object.freeze(fakeInternalInstance);
 }
 
+/**
+ * @JSONZ V16的新生命周期 getDerivedStateFromProps
+ */
 export function applyDerivedStateFromProps(
   workInProgress: Fiber,
   getDerivedStateFromProps: (props: any, state: any) => any,
   nextProps: any,
 ) {
   const prevState = workInProgress.memoizedState;
+  console.log('applyDerivedStateFromProps 调用生命周期函数 getDerivedStateFromProps');
 
   if (__DEV__) {
     if (
@@ -468,11 +474,15 @@ function adoptClassInstance(workInProgress: Fiber, instance: any): void {
   }
 }
 
+/**
+ * @JSONZ 创建class实例
+ */
 function constructClassInstance(
   workInProgress: Fiber,
   props: any,
   renderExpirationTime: ExpirationTime,
 ): any {
+  console.log('constructClassInstance 创建class Component 实例', { workInProgress, props, renderExpirationTime});
   const ctor = workInProgress.type;
   const unmaskedContext = getUnmaskedContext(workInProgress);
   const needsContext = isContextConsumer(workInProgress);
@@ -592,7 +602,11 @@ function constructClassInstance(
   return instance;
 }
 
+/**
+ * @JSONZ 调用生命周期函数 componentWillMount
+ */
 function callComponentWillMount(workInProgress, instance) {
+  console.log('callComponentWillMount 调用 componentWIllMount');
   startPhaseTimer(workInProgress, 'componentWillMount');
   const oldState = instance.state;
 
@@ -619,12 +633,16 @@ function callComponentWillMount(workInProgress, instance) {
   }
 }
 
+/**
+ * @JSONZ 生命周期函数 componentWillReceiveProps UNSAFE_componentWillReceiveProps
+ */
 function callComponentWillReceiveProps(
   workInProgress,
   instance,
   newProps,
   nextLegacyContext,
 ) {
+  console.log('callComponentWillReceiveProps 调用生命周期函数 componentWillReceiveProps');
   const oldState = instance.state;
   startPhaseTimer(workInProgress, 'componentWillReceiveProps');
   if (typeof instance.componentWillReceiveProps === 'function') {
@@ -654,11 +672,15 @@ function callComponentWillReceiveProps(
   }
 }
 
+/**
+ * @JSONZ 挂载生命周期到实例上
+ */
 // Invokes the mount life-cycles on a previously never rendered instance.
 function mountClassInstance(
   workInProgress: Fiber,
   renderExpirationTime: ExpirationTime,
 ): void {
+  console.log('mountClassInstance ');
   const ctor = workInProgress.type;
 
   if (__DEV__) {
@@ -697,6 +719,8 @@ function mountClassInstance(
 
   let updateQueue = workInProgress.updateQueue;
   if (updateQueue !== null) {
+    console.log('mountClassInstance updateQUeue !== null 什么情况呢？');
+    debugger;
     processUpdateQueue(
       workInProgress,
       updateQueue,
@@ -709,6 +733,7 @@ function mountClassInstance(
 
   const getDerivedStateFromProps = ctor.getDerivedStateFromProps;
   if (typeof getDerivedStateFromProps === 'function') {
+    console.log('react16 新的生命周期函数 getDerivedStateFromProps');
     applyDerivedStateFromProps(workInProgress, getDerivedStateFromProps, props);
     instance.state = workInProgress.memoizedState;
   }
@@ -742,6 +767,9 @@ function mountClassInstance(
   }
 }
 
+/**
+ * @JSONZ
+ */
 function resumeMountClassInstance(
   workInProgress: Fiber,
   hasPendingNewContext: boolean,
@@ -880,6 +908,9 @@ function resumeMountClassInstance(
   return shouldUpdate;
 }
 
+/**
+ * @JSONZ 更新 class instance
+ */
 // Invokes the update life-cycles and returns false if it shouldn't rerender.
 function updateClassInstance(
   current: Fiber,
@@ -933,6 +964,7 @@ function updateClassInstance(
   let newState = (instance.state = oldState);
   let updateQueue = workInProgress.updateQueue;
   if (updateQueue !== null) {
+    // 更新stste
     processUpdateQueue(
       workInProgress,
       updateQueue,

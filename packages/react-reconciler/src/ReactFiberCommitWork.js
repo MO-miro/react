@@ -240,6 +240,7 @@ function commitLifeCycles(
   finishedWork: Fiber,
   committedExpirationTime: ExpirationTime,
 ): void {
+  console.log('commitLifeCycles');
   switch (finishedWork.tag) {
     case ClassComponent: {
       const instance = finishedWork.stateNode;
@@ -594,6 +595,9 @@ function getHostSibling(fiber: Fiber): ?Instance {
   }
 }
 
+/**
+ * @JSONZ commit Placement 处理放置型的 effect
+ */
 function commitPlacement(finishedWork: Fiber): void {
   if (!supportsMutation) {
     return;
@@ -632,6 +636,10 @@ function commitPlacement(finishedWork: Fiber): void {
     // Clear ContentReset from the effect tag
     parentFiber.effectTag &= ~ContentReset;
   }
+
+  console.log('commitPlacement 处理放置型的effect',{
+    parentFiber, parent, isContainer,
+  });
 
   const before = getHostSibling(finishedWork);
   // We only have the top Fiber that was inserted but we need recurse down its

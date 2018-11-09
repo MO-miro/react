@@ -60,6 +60,9 @@ function pop<T>(cursor: StackCursor<T>, fiber: Fiber): void {
   index--;
 }
 
+/**
+ * @JSONZ 维护一个堆栈
+ */
 function push<T>(cursor: StackCursor<T>, value: T, fiber: Fiber): void {
   index++;
 

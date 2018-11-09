@@ -51,6 +51,8 @@ const {
   RN_FB_PROFILING,
 } = Bundles.bundleTypes;
 
+// ! @JSONZ 做标识跳过一些不必要的build
+const isJsonzDebugger = (argv.jsonz || '');
 const requestedBundleTypes = (argv.type || '')
   .split(',')
   .map(type => type.toUpperCase());
@@ -321,7 +323,9 @@ function getPlugins(
     },
     // Turn __DEV__ and process.env checks into constants.
     replace({
-      __DEV__: isProduction ? 'false' : 'true',
+      // __DEV__: isProduction ? 'false' : 'true',
+      // @JSONZ 测试修改
+      __DEV__: 'false',
       __PROFILE__: isProfiling || !isProduction ? 'true' : 'false',
       'process.env.NODE_ENV': isProduction ? "'production'" : "'development'",
     }),
@@ -577,8 +581,15 @@ async function buildEverything() {
 
   // Run them serially for better console output
   // and to avoid any potential race conditions.
+  // ! @JSONZ 根据传入的参数判断哪些需要build 这里最费时
   // eslint-disable-next-line no-for-of-loops/no-for-of-loops
   for (const bundle of Bundles.bundles) {
+    // ! @JSONZ 如果是JSONZ
+    if (isJsonzDebugger) {
+      await createBundle(bundle, UMD_DEV);
+      continue;
+    }
+
     await createBundle(bundle, UMD_DEV);
     await createBundle(bundle, UMD_PROD);
     await createBundle(bundle, NODE_DEV);
@@ -595,7 +606,9 @@ async function buildEverything() {
     await createBundle(bundle, RN_FB_PROFILING);
   }
 
+  // 工具 && 插件等
   await Packaging.copyAllShims();
+  // 生成 npm 包
   await Packaging.prepareNpmPackages();
 
   if (syncFBSourcePath) {

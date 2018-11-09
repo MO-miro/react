@@ -6,7 +6,9 @@
  *
  * @flow
  */
-
+/**
+ * @JSONZ 这里主要是给fiber加tag，后面根据tag来做一些区别处理
+ */
 export type TypeOfWork =
   | 0
   | 1
