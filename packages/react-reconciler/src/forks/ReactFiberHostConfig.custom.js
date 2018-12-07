@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -52,6 +52,7 @@ export const shouldDeprioritizeSubtree =
 export const createTextInstance = $$$hostConfig.createTextInstance;
 export const scheduleDeferredCallback = $$$hostConfig.scheduleDeferredCallback;
 export const cancelDeferredCallback = $$$hostConfig.cancelDeferredCallback;
+export const shouldYield = $$$hostConfig.shouldYield;
 export const scheduleTimeout = $$$hostConfig.setTimeout;
 export const cancelTimeout = $$$hostConfig.clearTimeout;
 export const noTimeout = $$$hostConfig.noTimeout;
@@ -75,6 +76,10 @@ export const insertInContainerBefore = $$$hostConfig.insertInContainerBefore;
 export const removeChild = $$$hostConfig.removeChild;
 export const removeChildFromContainer = $$$hostConfig.removeChildFromContainer;
 export const resetTextContent = $$$hostConfig.resetTextContent;
+export const hideInstance = $$$hostConfig.hideInstance;
+export const hideTextInstance = $$$hostConfig.hideTextInstance;
+export const unhideInstance = $$$hostConfig.unhideInstance;
+export const unhideTextInstance = $$$hostConfig.unhideTextInstance;
 
 // -------------------
 //     Persistence
@@ -87,6 +92,9 @@ export const appendChildToContainerChildSet =
 export const finalizeContainerChildren =
   $$$hostConfig.finalizeContainerChildren;
 export const replaceContainerChildren = $$$hostConfig.replaceContainerChildren;
+export const cloneHiddenInstance = $$$hostConfig.cloneHiddenInstance;
+export const cloneUnhiddenInstance = $$$hostConfig.cloneUnhiddenInstance;
+export const createHiddenTextInstance = $$$hostConfig.createHiddenTextInstance;
 
 // -------------------
 //     Hydration

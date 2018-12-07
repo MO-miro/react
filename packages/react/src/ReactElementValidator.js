@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -18,6 +18,7 @@ import getComponentName from 'shared/getComponentName';
 import {
   getIteratorFn,
   REACT_FORWARD_REF_TYPE,
+  REACT_MEMO_TYPE,
   REACT_FRAGMENT_TYPE,
   REACT_ELEMENT_TYPE,
 } from 'shared/ReactSymbols';
@@ -185,19 +186,20 @@ function validateChildKeys(node, parentType) {
  */
 function validatePropTypes(element) {
   const type = element.type;
-  let name, propTypes;
+  if (type === null || type === undefined || typeof type === 'string') {
+    return;
+  }
+  const name = getComponentName(type);
+  let propTypes;
   if (typeof type === 'function') {
-    // Class or functional component
-    name = type.displayName || type.name;
     propTypes = type.propTypes;
   } else if (
     typeof type === 'object' &&
-    type !== null &&
-    type.$$typeof === REACT_FORWARD_REF_TYPE
+    (type.$$typeof === REACT_FORWARD_REF_TYPE ||
+      // Note: Memo only checks outer props here.
+      // Inner props are checked in the reconciler.
+      type.$$typeof === REACT_MEMO_TYPE)
   ) {
-    // ForwardRef
-    const functionName = type.render.displayName || type.render.name || '';
-    name = functionName !== '' ? `ForwardRef(${functionName})` : 'ForwardRef';
     propTypes = type.propTypes;
   } else {
     return;

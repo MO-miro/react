@@ -2,6 +2,7 @@
 
 const jestDiff = require('jest-diff');
 const util = require('util');
+const shouldIgnoreConsoleError = require('../shouldIgnoreConsoleError');
 
 function normalizeCodeLocInfo(str) {
   return str && str.replace(/at .+?:\d+/g, 'at **');
@@ -54,6 +55,15 @@ const createMatcherFor = consoleMethod =>
         typeof message === 'string' && message.includes('\n    in ');
 
       const consoleSpy = (format, ...args) => {
+        // Ignore uncaught errors reported by jsdom
+        // and React addendums because they're too noisy.
+        if (
+          consoleMethod === 'error' &&
+          shouldIgnoreConsoleError(format, args)
+        ) {
+          return;
+        }
+
         const message = util.format(format, ...args);
         const normalizedMessage = normalizeCodeLocInfo(message);
 
@@ -120,7 +130,7 @@ const createMatcherFor = consoleMethod =>
       };
 
       // TODO Decide whether we need to support nested toWarn* expectations.
-      // If we don't need id, add a check here to see if this is already our spy,
+      // If we don't need it, add a check here to see if this is already our spy,
       // And throw an error.
       const originalMethod = console[consoleMethod];
 

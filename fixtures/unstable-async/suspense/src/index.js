@@ -1,6 +1,6 @@
 import React, {Fragment, PureComponent} from 'react';
 import {unstable_createRoot, render} from 'react-dom';
-import {cache} from './cache';
+import {unstable_trace as trace} from 'scheduler/tracing';
 import {
   setFakeRequestTime,
   setPaused,
@@ -64,11 +64,14 @@ class Debugger extends PureComponent {
   }
 
   handleReset = () => {
-    cache.invalidate();
-    this.setState(state => ({
-      requests: {},
-    }));
-    handleReset();
+    trace('Clear cache', performance.now(), () => {
+      // TODO: this is not implemented.
+      // cache.invalidate();
+      this.setState(state => ({
+        requests: {},
+      }));
+      handleReset();
+    });
   };
 
   handleProgress = (url, progress, isPaused) => {

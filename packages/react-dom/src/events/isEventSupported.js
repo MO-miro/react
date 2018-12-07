@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,13 +16,12 @@ import {canUseDOM} from 'shared/ExecutionEnvironment';
  * Borrows from Modernizr.
  *
  * @param {string} eventNameSuffix Event name, e.g. "click".
- * @param {?boolean} capture Check if the capture phase is supported.
  * @return {boolean} True if the event is supported.
  * @internal
  * @license Modernizr 3.0.0pre (Custom Build) | MIT
  */
-function isEventSupported(eventNameSuffix, capture) {
-  if (!canUseDOM || (capture && !('addEventListener' in document))) {
+function isEventSupported(eventNameSuffix) {
+  if (!canUseDOM) {
     return false;
   }
 

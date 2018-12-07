@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -20,7 +20,8 @@ import {
   ContextProvider,
   ContextConsumer,
   Mode,
-} from 'shared/ReactTypeOfWork';
+  SuspenseComponent,
+} from 'shared/ReactWorkTags';
 
 type MeasurementPhase =
   | 'componentWillMount'
@@ -318,7 +319,10 @@ export function stopFailedWorkTimer(fiber: Fiber): void {
       return;
     }
     fiber._debugIsCurrentlyTiming = false;
-    const warning = 'An error was thrown inside this error boundary';
+    const warning =
+      fiber.tag === SuspenseComponent
+        ? 'Rendering was suspended'
+        : 'An error was thrown inside this error boundary';
     endFiberMark(fiber, null, warning);
   }
 }

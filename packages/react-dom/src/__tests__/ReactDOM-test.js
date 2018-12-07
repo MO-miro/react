@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -23,34 +23,41 @@ describe('ReactDOM', () => {
     ReactTestUtils = require('react-dom/test-utils');
   });
 
-  // TODO: uncomment this test once we can run in phantom, which
-  // supports real submit events.
-  /*
   it('should bubble onSubmit', function() {
-    const count = 0;
-    const form;
-    const Parent = React.createClass({
-      handleSubmit: function() {
-        count++;
-        return false;
-      },
-      render: function() {
-        return <Child />;
-      }
-    });
-    const Child = React.createClass({
-      render: function() {
-        return <form><input type="submit" value="Submit" /></form>;
-      },
-      componentDidMount: function() {
-        form = ReactDOM.findDOMNode(this);
-      }
-    });
-    const instance = ReactTestUtils.renderIntoDocument(<Parent />);
-    form.submit();
-    expect(count).toEqual(1);
+    const container = document.createElement('div');
+
+    let count = 0;
+    let buttonRef;
+
+    function Parent() {
+      return (
+        <div
+          onSubmit={event => {
+            event.preventDefault();
+            count++;
+          }}>
+          <Child />
+        </div>
+      );
+    }
+
+    function Child() {
+      return (
+        <form>
+          <input type="submit" ref={button => (buttonRef = button)} />
+        </form>
+      );
+    }
+
+    document.body.appendChild(container);
+    try {
+      ReactDOM.render(<Parent />, container);
+      buttonRef.click();
+      expect(count).toBe(1);
+    } finally {
+      document.body.removeChild(container);
+    }
   });
-  */
 
   it('allows a DOM element to be used with a string', () => {
     const element = React.createElement('div', {className: 'foo'});
@@ -380,7 +387,7 @@ describe('ReactDOM', () => {
     }
   });
 
-  it('should not crash calling findDOMNode inside a functional component', () => {
+  it('should not crash calling findDOMNode inside a function component', () => {
     const container = document.createElement('div');
 
     class Component extends React.Component {
@@ -440,20 +447,6 @@ describe('ReactDOM', () => {
     } finally {
       // Don't break other tests.
       Object.defineProperty(global, 'document', documentDescriptor);
-    }
-  });
-
-  it('warns when requestAnimationFrame is not polyfilled', () => {
-    const previousRAF = global.requestAnimationFrame;
-    try {
-      delete global.requestAnimationFrame;
-      jest.resetModules();
-      expect(() => require('react-dom')).toWarnDev(
-        "This browser doesn't support requestAnimationFrame.",
-        {withoutStack: true},
-      );
-    } finally {
-      global.requestAnimationFrame = previousRAF;
     }
   });
 

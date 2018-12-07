@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -359,7 +359,7 @@ describe('ReactShallowRenderer', () => {
     expect(renderCounter).toEqual(2);
   });
 
-  it('should shallow render a functional component', () => {
+  it('should shallow render a function component', () => {
     function SomeComponent(props, context) {
       return (
         <div>
@@ -1408,7 +1408,7 @@ describe('ReactShallowRenderer', () => {
     expect(log).toEqual(['render']);
   });
 
-  it('should not get this in a functional component', () => {
+  it('should not get this in a function component', () => {
     const logs = [];
     function Foo() {
       logs.push(this);

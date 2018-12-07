@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,7 +12,7 @@
 let React = require('react');
 let ReactDOM = require('react-dom');
 let ReactDOMServer = require('react-dom/server');
-let AsyncMode = React.unstable_AsyncMode;
+let ConcurrentMode = React.unstable_ConcurrentMode;
 
 describe('ReactDOMRoot', () => {
   let container;
@@ -22,7 +22,7 @@ describe('ReactDOMRoot', () => {
   beforeEach(() => {
     container = document.createElement('div');
     // TODO pull this into helper method, reduce repetition.
-    // mock the browser APIs which are used in react-scheduler:
+    // mock the browser APIs which are used in schedule:
     // - requestAnimationFrame should pass the DOMHighResTimeStamp argument
     // - calling 'window.postMessage' should actually fire postmessage handlers
     // - must allow artificially changing time returned by Date.now
@@ -63,7 +63,7 @@ describe('ReactDOMRoot', () => {
     React = require('react');
     ReactDOM = require('react-dom');
     ReactDOMServer = require('react-dom/server');
-    AsyncMode = React.unstable_AsyncMode;
+    ConcurrentMode = React.unstable_ConcurrentMode;
   });
 
   it('renders children', () => {
@@ -85,7 +85,7 @@ describe('ReactDOMRoot', () => {
 
   it('`root.render` returns a thenable work object', () => {
     const root = ReactDOM.unstable_createRoot(container);
-    const work = root.render(<AsyncMode>Hi</AsyncMode>);
+    const work = root.render(<ConcurrentMode>Hi</ConcurrentMode>);
     let ops = [];
     work.then(() => {
       ops.push('inside callback: ' + container.textContent);
@@ -103,7 +103,7 @@ describe('ReactDOMRoot', () => {
 
   it('resolves `work.then` callback synchronously if the work already committed', () => {
     const root = ReactDOM.unstable_createRoot(container);
-    const work = root.render(<AsyncMode>Hi</AsyncMode>);
+    const work = root.render(<ConcurrentMode>Hi</ConcurrentMode>);
     jest.runAllTimers();
     let ops = [];
     work.then(() => {
@@ -196,9 +196,9 @@ describe('ReactDOMRoot', () => {
     const root = ReactDOM.unstable_createRoot(container);
     const batch = root.createBatch();
     batch.render(
-      <AsyncMode>
+      <ConcurrentMode>
         <App />
-      </AsyncMode>,
+      </ConcurrentMode>,
     );
 
     jest.runAllTimers();
@@ -246,7 +246,7 @@ describe('ReactDOMRoot', () => {
   it('can wait for a batch to finish', () => {
     const root = ReactDOM.unstable_createRoot(container);
     const batch = root.createBatch();
-    batch.render(<AsyncMode>Foo</AsyncMode>);
+    batch.render(<ConcurrentMode>Foo</ConcurrentMode>);
 
     jest.runAllTimers();
 
@@ -286,7 +286,7 @@ describe('ReactDOMRoot', () => {
 
   it('can commit an empty batch', () => {
     const root = ReactDOM.unstable_createRoot(container);
-    root.render(<AsyncMode>1</AsyncMode>);
+    root.render(<ConcurrentMode>1</ConcurrentMode>);
 
     advanceCurrentTime(2000);
     // This batch has a later expiration time than the earlier update.

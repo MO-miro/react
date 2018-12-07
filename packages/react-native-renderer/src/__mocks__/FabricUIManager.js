@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -50,7 +50,7 @@ const RCTFabricUIManager = {
     viewName,
     rootTag,
     props,
-    instanceHandle,
+    eventTarget,
   ) {
     invariant(
       !allocatedTags.has(reactTag),
@@ -65,7 +65,7 @@ const RCTFabricUIManager = {
       children: [],
     };
   }),
-  cloneNode: jest.fn(function cloneNode(node, instanceHandle) {
+  cloneNode: jest.fn(function cloneNode(node) {
     return {
       reactTag: node.reactTag,
       viewName: node.viewName,
@@ -73,10 +73,7 @@ const RCTFabricUIManager = {
       children: node.children,
     };
   }),
-  cloneNodeWithNewChildren: jest.fn(function cloneNodeWithNewChildren(
-    node,
-    instanceHandle,
-  ) {
+  cloneNodeWithNewChildren: jest.fn(function cloneNodeWithNewChildren(node) {
     return {
       reactTag: node.reactTag,
       viewName: node.viewName,
@@ -87,7 +84,6 @@ const RCTFabricUIManager = {
   cloneNodeWithNewProps: jest.fn(function cloneNodeWithNewProps(
     node,
     newPropsDiff,
-    instanceHandle,
   ) {
     return {
       reactTag: node.reactTag,
@@ -97,11 +93,7 @@ const RCTFabricUIManager = {
     };
   }),
   cloneNodeWithNewChildrenAndProps: jest.fn(
-    function cloneNodeWithNewChildrenAndProps(
-      node,
-      newPropsDiff,
-      instanceHandle,
-    ) {
+    function cloneNodeWithNewChildrenAndProps(node, newPropsDiff) {
       return {
         reactTag: node.reactTag,
         viewName: node.viewName,

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,10 +15,18 @@ import type {
   ReactNativeBaseComponentViewConfig,
 } from './ReactNativeTypes';
 
-import {mountSafeCallback, warnForStyleProps} from './NativeMethodsMixinUtils';
-import * as ReactNativeAttributePayload from './ReactNativeAttributePayload';
-import * as ReactNativeFrameScheduling from './ReactNativeFrameScheduling';
-import * as ReactNativeViewConfigRegistry from 'ReactNativeViewConfigRegistry';
+import {
+  mountSafeCallback_NOT_REALLY_SAFE,
+  warnForStyleProps,
+} from './NativeMethodsMixinUtils';
+import {create, diff} from './ReactNativeAttributePayload';
+import {
+  now as ReactNativeFrameSchedulingNow,
+  cancelDeferredCallback as ReactNativeFrameSchedulingCancelDeferredCallback,
+  scheduleDeferredCallback as ReactNativeFrameSchedulingScheduleDeferredCallback,
+  shouldYield as ReactNativeFrameSchedulingShouldYield,
+} from './ReactNativeFrameScheduling';
+import {get as getViewConfigForType} from 'ReactNativeViewConfigRegistry';
 
 import deepFreezeAndThrowOnMutationInDev from 'deepFreezeAndThrowOnMutationInDev';
 import invariant from 'shared/invariant';
@@ -82,12 +90,12 @@ if (registerEventHandler) {
  */
 class ReactFabricHostComponent {
   _nativeTag: number;
-  viewConfig: ReactNativeBaseComponentViewConfig;
+  viewConfig: ReactNativeBaseComponentViewConfig<>;
   currentProps: Props;
 
   constructor(
     tag: number,
-    viewConfig: ReactNativeBaseComponentViewConfig,
+    viewConfig: ReactNativeBaseComponentViewConfig<>,
     props: Props,
   ) {
     this._nativeTag = tag;
@@ -104,13 +112,16 @@ class ReactFabricHostComponent {
   }
 
   measure(callback: MeasureOnSuccessCallback) {
-    UIManager.measure(this._nativeTag, mountSafeCallback(this, callback));
+    UIManager.measure(
+      this._nativeTag,
+      mountSafeCallback_NOT_REALLY_SAFE(this, callback),
+    );
   }
 
   measureInWindow(callback: MeasureInWindowOnSuccessCallback) {
     UIManager.measureInWindow(
       this._nativeTag,
-      mountSafeCallback(this, callback),
+      mountSafeCallback_NOT_REALLY_SAFE(this, callback),
     );
   }
 
@@ -122,8 +133,8 @@ class ReactFabricHostComponent {
     UIManager.measureLayout(
       this._nativeTag,
       relativeToNativeNode,
-      mountSafeCallback(this, onFail),
-      mountSafeCallback(this, onSuccess),
+      mountSafeCallback_NOT_REALLY_SAFE(this, onFail),
+      mountSafeCallback_NOT_REALLY_SAFE(this, onSuccess),
     );
   }
 
@@ -132,10 +143,7 @@ class ReactFabricHostComponent {
       warnForStyleProps(nativeProps, this.viewConfig.validAttributes);
     }
 
-    const updatePayload = ReactNativeAttributePayload.create(
-      nativeProps,
-      this.viewConfig.validAttributes,
-    );
+    const updatePayload = create(nativeProps, this.viewConfig.validAttributes);
 
     // Avoid the overhead of bridge calls if there's no update.
     // This is an expensive no-op for Android, and causes an unnecessary
@@ -173,7 +181,7 @@ export function createInstance(
   const tag = nextReactTag;
   nextReactTag += 2;
 
-  const viewConfig = ReactNativeViewConfigRegistry.get(type);
+  const viewConfig = getViewConfigForType(type);
 
   if (__DEV__) {
     for (const key in viewConfig.validAttributes) {
@@ -188,10 +196,7 @@ export function createInstance(
     'Nesting of <View> within <Text> is not currently supported.',
   );
 
-  const updatePayload = ReactNativeAttributePayload.create(
-    props,
-    viewConfig.validAttributes,
-  );
+  const updatePayload = create(props, viewConfig.validAttributes);
 
   const node = createNode(
     tag, // reactTag
@@ -289,11 +294,7 @@ export function prepareUpdate(
   hostContext: HostContext,
 ): null | Object {
   const viewConfig = instance.canonical.viewConfig;
-  const updatePayload = ReactNativeAttributePayload.diff(
-    oldProps,
-    newProps,
-    viewConfig.validAttributes,
-  );
+  const updatePayload = diff(oldProps, newProps, viewConfig.validAttributes);
   // TODO: If the event handlers have changed, we need to update the current props
   // in the commit phase but there is no host config hook to do it yet.
   // So instead we hack it by updating it in the render phase.
@@ -321,11 +322,10 @@ export function shouldSetTextContent(type: string, props: Props): boolean {
 
 // The Fabric renderer is secondary to the existing React Native renderer.
 export const isPrimaryRenderer = false;
-export const now = ReactNativeFrameScheduling.now;
-export const scheduleDeferredCallback =
-  ReactNativeFrameScheduling.scheduleDeferredCallback;
-export const cancelDeferredCallback =
-  ReactNativeFrameScheduling.cancelDeferredCallback;
+export const now = ReactNativeFrameSchedulingNow;
+export const scheduleDeferredCallback = ReactNativeFrameSchedulingScheduleDeferredCallback;
+export const cancelDeferredCallback = ReactNativeFrameSchedulingCancelDeferredCallback;
+export const shouldYield = ReactNativeFrameSchedulingShouldYield;
 
 export const scheduleTimeout = setTimeout;
 export const cancelTimeout = clearTimeout;
@@ -351,29 +351,67 @@ export function cloneInstance(
   let clone;
   if (keepChildren) {
     if (updatePayload !== null) {
-      clone = cloneNodeWithNewProps(
-        node,
-        updatePayload,
-        internalInstanceHandle,
-      );
+      clone = cloneNodeWithNewProps(node, updatePayload);
     } else {
-      clone = cloneNode(node, internalInstanceHandle);
+      clone = cloneNode(node);
     }
   } else {
     if (updatePayload !== null) {
-      clone = cloneNodeWithNewChildrenAndProps(
-        node,
-        updatePayload,
-        internalInstanceHandle,
-      );
+      clone = cloneNodeWithNewChildrenAndProps(node, updatePayload);
     } else {
-      clone = cloneNodeWithNewChildren(node, internalInstanceHandle);
+      clone = cloneNodeWithNewChildren(node);
     }
   }
   return {
     node: clone,
     canonical: instance.canonical,
   };
+}
+
+export function cloneHiddenInstance(
+  instance: Instance,
+  type: string,
+  props: Props,
+  internalInstanceHandle: Object,
+): Instance {
+  const viewConfig = instance.canonical.viewConfig;
+  const node = instance.node;
+  const updatePayload = create(
+    {style: {display: 'none'}},
+    viewConfig.validAttributes,
+  );
+  return {
+    node: cloneNodeWithNewProps(node, updatePayload),
+    canonical: instance.canonical,
+  };
+}
+
+export function cloneUnhiddenInstance(
+  instance: Instance,
+  type: string,
+  props: Props,
+  internalInstanceHandle: Object,
+): Instance {
+  const viewConfig = instance.canonical.viewConfig;
+  const node = instance.node;
+  const updatePayload = diff(
+    {...props, style: [props.style, {display: 'none'}]},
+    props,
+    viewConfig.validAttributes,
+  );
+  return {
+    node: cloneNodeWithNewProps(node, updatePayload),
+    canonical: instance.canonical,
+  };
+}
+
+export function createHiddenTextInstance(
+  text: string,
+  rootContainerInstance: Container,
+  hostContext: HostContext,
+  internalInstanceHandle: Object,
+): TextInstance {
+  throw new Error('Not yet implemented.');
 }
 
 export function createContainerChildSet(container: Container): ChildSet {

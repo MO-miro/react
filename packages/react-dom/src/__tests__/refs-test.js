@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -301,6 +301,45 @@ describe('ref swapping', () => {
     const a = ReactTestUtils.renderIntoDocument(<A />);
     expect(a.refs[1].nodeName).toBe('DIV');
   });
+
+  it('provides an error for invalid refs', () => {
+    expect(() => {
+      ReactTestUtils.renderIntoDocument(<div ref={10} />);
+    }).toThrow(
+      'Expected ref to be a function, a string, an object returned by React.createRef(), or null.',
+    );
+    expect(() => {
+      ReactTestUtils.renderIntoDocument(<div ref={true} />);
+    }).toThrow(
+      'Expected ref to be a function, a string, an object returned by React.createRef(), or null.',
+    );
+    expect(() => {
+      ReactTestUtils.renderIntoDocument(<div ref={Symbol('foo')} />);
+    }).toThrow(
+      'Expected ref to be a function, a string, an object returned by React.createRef(), or null.',
+    );
+    // This works
+    ReactTestUtils.renderIntoDocument(<div ref={undefined} />);
+    ReactTestUtils.renderIntoDocument({
+      $$typeof: Symbol.for('react.element'),
+      type: 'div',
+      props: {},
+      key: null,
+      ref: null,
+    });
+    // But this doesn't
+    expect(() => {
+      ReactTestUtils.renderIntoDocument({
+        $$typeof: Symbol.for('react.element'),
+        type: 'div',
+        props: {},
+        key: null,
+        ref: undefined,
+      });
+    }).toThrow(
+      'Expected ref to be a function, a string, an object returned by React.createRef(), or null.',
+    );
+  });
 });
 
 describe('root level refs', () => {
@@ -405,7 +444,7 @@ describe('creating element with ref in constructor', () => {
     }).toThrowError(
       'Element ref was specified as a string (p) but no owner was set. This could happen for one of' +
         ' the following reasons:\n' +
-        '1. You may be adding a ref to a functional component\n' +
+        '1. You may be adding a ref to a function component\n' +
         "2. You may be adding a ref to a component that was not created inside a component's render method\n" +
         '3. You have multiple copies of React loaded\n' +
         'See https://fb.me/react-refs-must-have-owner for more information.',

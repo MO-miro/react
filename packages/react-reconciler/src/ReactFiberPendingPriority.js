@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -42,13 +42,13 @@ export function markPendingPriorityLevel(
     // No other pending updates.
     root.earliestPendingTime = root.latestPendingTime = expirationTime;
   } else {
-    if (earliestPendingTime > expirationTime) {
+    if (earliestPendingTime < expirationTime) {
       // This is the earliest pending update.
       root.earliestPendingTime = expirationTime;
     } else {
       const latestPendingTime = root.latestPendingTime;
-      if (latestPendingTime < expirationTime) {
-        //  This is the latest pending update
+      if (latestPendingTime > expirationTime) {
+        // This is the latest pending update
         root.latestPendingTime = expirationTime;
       }
     }
@@ -76,12 +76,12 @@ export function markCommittedPriorityLevels(
   // Let's see if the previous latest known pending level was just flushed.
   const latestPendingTime = root.latestPendingTime;
   if (latestPendingTime !== NoWork) {
-    if (latestPendingTime < earliestRemainingTime) {
+    if (latestPendingTime > earliestRemainingTime) {
       // We've flushed all the known pending levels.
       root.earliestPendingTime = root.latestPendingTime = NoWork;
     } else {
       const earliestPendingTime = root.earliestPendingTime;
-      if (earliestPendingTime < earliestRemainingTime) {
+      if (earliestPendingTime > earliestRemainingTime) {
         // We've flushed the earliest known pending level. Set this to the
         // latest pending time.
         root.earliestPendingTime = root.latestPendingTime;
@@ -103,7 +103,7 @@ export function markCommittedPriorityLevels(
   }
 
   const latestSuspendedTime = root.latestSuspendedTime;
-  if (earliestRemainingTime > latestSuspendedTime) {
+  if (earliestRemainingTime < latestSuspendedTime) {
     // The earliest remaining level is later than all the suspended work. That
     // means we've flushed all the suspended work.
     root.earliestSuspendedTime = NoWork;
@@ -117,7 +117,7 @@ export function markCommittedPriorityLevels(
     return;
   }
 
-  if (earliestRemainingTime < earliestSuspendedTime) {
+  if (earliestRemainingTime > earliestSuspendedTime) {
     // The earliest remaining time is earlier than all the suspended work.
     // Treat it as a pending update.
     markPendingPriorityLevel(root, earliestRemainingTime);
@@ -139,10 +139,10 @@ export function hasLowerPriorityWork(
   const latestPingedTime = root.latestPingedTime;
   return (
     (latestPendingTime !== NoWork &&
-      latestPendingTime > erroredExpirationTime) ||
+      latestPendingTime < erroredExpirationTime) ||
     (latestSuspendedTime !== NoWork &&
-      latestSuspendedTime > erroredExpirationTime) ||
-    (latestPingedTime !== NoWork && latestPingedTime > erroredExpirationTime)
+      latestSuspendedTime < erroredExpirationTime) ||
+    (latestPingedTime !== NoWork && latestPingedTime < erroredExpirationTime)
   );
 }
 
@@ -154,8 +154,8 @@ export function isPriorityLevelSuspended(
   const latestSuspendedTime = root.latestSuspendedTime;
   return (
     earliestSuspendedTime !== NoWork &&
-    expirationTime >= earliestSuspendedTime &&
-    expirationTime <= latestSuspendedTime
+    expirationTime <= earliestSuspendedTime &&
+    expirationTime >= latestSuspendedTime
   );
 }
 
@@ -191,10 +191,10 @@ export function markSuspendedPriorityLevel(
     // No other suspended levels.
     root.earliestSuspendedTime = root.latestSuspendedTime = suspendedTime;
   } else {
-    if (earliestSuspendedTime > suspendedTime) {
+    if (earliestSuspendedTime < suspendedTime) {
       // This is the earliest suspended level.
       root.earliestSuspendedTime = suspendedTime;
-    } else if (latestSuspendedTime < suspendedTime) {
+    } else if (latestSuspendedTime > suspendedTime) {
       // This is the latest suspended level
       root.latestSuspendedTime = suspendedTime;
     }
@@ -213,7 +213,7 @@ export function markPingedPriorityLevel(
   // is thrown out and not reused during the restarted render. One way to
   // invalidate the progressed work is to restart at expirationTime + 1.
   const latestPingedTime = root.latestPingedTime;
-  if (latestPingedTime === NoWork || latestPingedTime < pingedTime) {
+  if (latestPingedTime === NoWork || latestPingedTime > pingedTime) {
     root.latestPingedTime = pingedTime;
   }
   findNextExpirationTimeToWorkOn(pingedTime, root);
@@ -223,7 +223,7 @@ function clearPing(root, completedTime) {
   // TODO: Track whether the root was pinged during the render phase. If so,
   // we need to make sure we don't lose track of it.
   const latestPingedTime = root.latestPingedTime;
-  if (latestPingedTime !== NoWork && latestPingedTime <= completedTime) {
+  if (latestPingedTime !== NoWork && latestPingedTime >= completedTime) {
     root.latestPingedTime = NoWork;
   }
 }
@@ -236,21 +236,24 @@ export function findEarliestOutstandingPriorityLevel(
 
   const earliestPendingTime = root.earliestPendingTime;
   const earliestSuspendedTime = root.earliestSuspendedTime;
-  if (
-    earliestExpirationTime === NoWork ||
-    (earliestPendingTime !== NoWork &&
-      earliestPendingTime < earliestExpirationTime)
-  ) {
+  if (earliestPendingTime > earliestExpirationTime) {
     earliestExpirationTime = earliestPendingTime;
   }
-  if (
-    earliestExpirationTime === NoWork ||
-    (earliestSuspendedTime !== NoWork &&
-      earliestSuspendedTime < earliestExpirationTime)
-  ) {
+  if (earliestSuspendedTime > earliestExpirationTime) {
     earliestExpirationTime = earliestSuspendedTime;
   }
   return earliestExpirationTime;
+}
+
+export function didExpireAtExpirationTime(
+  root: FiberRoot,
+  currentTime: ExpirationTime,
+): void {
+  const expirationTime = root.expirationTime;
+  if (expirationTime !== NoWork && currentTime <= expirationTime) {
+    // The root has expired. Flush all work up to the current time.
+    root.nextExpirationTimeToWorkOn = currentTime;
+  }
 }
 
 /**
@@ -276,7 +279,7 @@ function findNextExpirationTimeToWorkOn(completedExpirationTime, root) {
   if (
     nextExpirationTimeToWorkOn === NoWork &&
     (completedExpirationTime === NoWork ||
-      latestSuspendedTime > completedExpirationTime)
+      latestSuspendedTime < completedExpirationTime)
   ) {
     // 最低优先级的工作是最有可能下次提交？ 让我们再次render他，所以如果超时，我们就可以准备提交？ 奇奇怪怪的
     // The lowest priority suspended work is the work most likely to be
@@ -286,12 +289,8 @@ function findNextExpirationTimeToWorkOn(completedExpirationTime, root) {
   }
 
   let expirationTime = nextExpirationTimeToWorkOn;
-  if (
-    expirationTime !== NoWork &&
-    earliestSuspendedTime !== NoWork &&
-    earliestSuspendedTime < expirationTime
-  ) {
-    // 使用最早的已知的过期时间
+  if (expirationTime !== NoWork && earliestSuspendedTime > expirationTime) {
+
     // Expire using the earliest known expiration time.
     expirationTime = earliestSuspendedTime;
   }

@@ -21,7 +21,7 @@ class T extends React.Component {
       }));
     }
     this.setState({
-      text: text.includes('jsonz')? 'world'+a: 'jsonz'+a
+      text: this.state.text.includes('jsonz')? 'world'+a: 'jsonz'+a
     });
   }
 

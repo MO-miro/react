@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,6 +13,7 @@
 let React;
 let ReactDOMServer;
 let PropTypes;
+let ReactCurrentOwner;
 
 function normalizeCodeLocInfo(str) {
   return str && str.replace(/\(at .+?:\d+\)/g, '(at **)');
@@ -24,6 +25,9 @@ describe('ReactDOMServer', () => {
     React = require('react');
     PropTypes = require('prop-types');
     ReactDOMServer = require('react-dom/server');
+    ReactCurrentOwner =
+      React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+        .ReactCurrentOwner;
   });
 
   describe('renderToString', () => {
@@ -431,6 +435,44 @@ describe('ReactDOMServer', () => {
       expect(results).toEqual([2, 1, 3, 1]);
     });
 
+    it('renders with dispatcher.readContext mechanism', () => {
+      const Context = React.createContext(0);
+
+      function readContext(context) {
+        return ReactCurrentOwner.currentDispatcher.readContext(context);
+      }
+
+      function Consumer(props) {
+        return 'Result: ' + readContext(Context);
+      }
+
+      const Indirection = React.Fragment;
+
+      function App(props) {
+        return (
+          <Context.Provider value={props.value}>
+            <Context.Provider value={2}>
+              <Consumer />
+            </Context.Provider>
+            <Indirection>
+              <Indirection>
+                <Consumer />
+                <Context.Provider value={3}>
+                  <Consumer />
+                </Context.Provider>
+              </Indirection>
+            </Indirection>
+            <Consumer />
+          </Context.Provider>
+        );
+      }
+
+      const markup = ReactDOMServer.renderToString(<App value={1} />);
+      // Extract the numbers rendered by the consumers
+      const results = markup.match(/\d+/g).map(Number);
+      expect(results).toEqual([2, 1, 3, 1]);
+    });
+
     it('renders context API, reentrancy', () => {
       const Context = React.createContext(0);
 
@@ -514,6 +556,52 @@ describe('ReactDOMServer', () => {
     });
   });
 
+  describe('renderToNodeStream', () => {
+    it('should generate simple markup', () => {
+      const SuccessfulElement = React.createElement(() => <img />);
+      const response = ReactDOMServer.renderToNodeStream(SuccessfulElement);
+      expect(response.read().toString()).toMatch(
+        new RegExp('<img data-reactroot=""' + '/>'),
+      );
+    });
+
+    it('should handle errors correctly', () => {
+      const FailingElement = React.createElement(() => {
+        throw new Error('An Error');
+      });
+      const response = ReactDOMServer.renderToNodeStream(FailingElement);
+      return new Promise(resolve => {
+        response.once('error', () => {
+          resolve();
+        });
+        expect(response.read()).toBeNull();
+      });
+    });
+  });
+
+  describe('renderToStaticNodeStream', () => {
+    it('should generate simple markup', () => {
+      const SuccessfulElement = React.createElement(() => <img />);
+      const response = ReactDOMServer.renderToStaticNodeStream(
+        SuccessfulElement,
+      );
+      expect(response.read().toString()).toMatch(new RegExp('<img' + '/>'));
+    });
+
+    it('should handle errors correctly', () => {
+      const FailingElement = React.createElement(() => {
+        throw new Error('An Error');
+      });
+      const response = ReactDOMServer.renderToStaticNodeStream(FailingElement);
+      return new Promise(resolve => {
+        response.once('error', () => {
+          resolve();
+        });
+        expect(response.read()).toBeNull();
+      });
+    });
+  });
+
   it('warns with a no-op when an async setState is triggered', () => {
     class Foo extends React.Component {
       UNSAFE_componentWillMount() {
@@ -564,6 +652,29 @@ describe('ReactDOMServer', () => {
     );
     const markup = ReactDOMServer.renderToStaticMarkup(<Baz />);
     expect(markup).toBe('<div></div>');
+  });
+
+  it('throws for unsupported types on the server', () => {
+    expect(() => {
+      ReactDOMServer.renderToString(<React.Suspense />);
+    }).toThrow('ReactDOMServer does not yet support Suspense.');
+
+    async function fakeImport(result) {
+      return {default: result};
+    }
+
+    expect(() => {
+      const LazyFoo = React.lazy(() =>
+        fakeImport(
+          new Promise(resolve =>
+            resolve(function Foo() {
+              return <div />;
+            }),
+          ),
+        ),
+      );
+      ReactDOMServer.renderToString(<LazyFoo />);
+    }).toThrow('ReactDOMServer does not yet support lazy-loaded components.');
   });
 
   it('should throw (in dev) when children are mutated during render', () => {
@@ -646,12 +757,13 @@ describe('ReactDOMServer', () => {
     expect(() => {
       expect(() =>
         ReactDOMServer.renderToString(<ClassWithRenderNotExtended />),
-      ).toWarnDev(
-        'Warning: The <ClassWithRenderNotExtended /> component appears to have a render method, ' +
-          "but doesn't extend React.Component. This is likely to cause errors. " +
-          'Change ClassWithRenderNotExtended to extend React.Component instead.',
-      );
-    }).toThrow(TypeError);
+      ).toThrow(TypeError);
+    }).toWarnDev(
+      'Warning: The <ClassWithRenderNotExtended /> component appears to have a render method, ' +
+        "but doesn't extend React.Component. This is likely to cause errors. " +
+        'Change ClassWithRenderNotExtended to extend React.Component instead.',
+      {withoutStack: true},
+    );
 
     // Test deduplication
     expect(() => {

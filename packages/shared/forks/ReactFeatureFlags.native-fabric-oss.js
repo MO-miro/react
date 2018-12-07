@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,12 +15,15 @@ import typeof * as FabricFeatureFlagsType from './ReactFeatureFlags.native-fabri
 export const debugRenderPhaseSideEffects = false;
 export const debugRenderPhaseSideEffectsForStrictMode = false;
 export const enableUserTimingAPI = __DEV__;
-export const enableGetDerivedStateFromCatch = false;
-export const enableSuspense = false;
+export const enableHooks = false;
 export const warnAboutDeprecatedLifecycles = false;
-export const warnAboutLegacyContextAPI = false;
 export const replayFailedUnitOfWorkWithInvokeGuardedCallback = __DEV__;
 export const enableProfilerTimer = __PROFILE__;
+export const enableSchedulerTracing = __PROFILE__;
+export const enableSuspenseServerRenderer = false;
+export const disableInputAttributeSyncing = false;
+export const enableStableConcurrentModeAPIs = false;
+export const warnAboutShorthandPropertyCollision = false;
 
 // Only used in www builds.
 export function addUserTimingListener() {

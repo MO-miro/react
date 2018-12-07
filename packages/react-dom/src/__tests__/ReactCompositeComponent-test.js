@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -332,7 +332,7 @@ describe('ReactCompositeComponent', () => {
     ReactDOM.unmountComponentAtNode(container);
 
     expect(() => instance.forceUpdate()).toWarnDev(
-      "Warning: Can't call setState (or forceUpdate) on an unmounted " +
+      "Warning: Can't perform a React state update on an unmounted " +
         'component. This is a no-op, but it indicates a memory leak in your ' +
         'application. To fix, cancel all subscriptions and asynchronous ' +
         'tasks in the componentWillUnmount method.\n' +
@@ -379,7 +379,7 @@ describe('ReactCompositeComponent', () => {
     expect(() => {
       instance.setState({value: 2});
     }).toWarnDev(
-      "Warning: Can't call setState (or forceUpdate) on an unmounted " +
+      "Warning: Can't perform a React state update on an unmounted " +
         'component. This is a no-op, but it indicates a memory leak in your ' +
         'application. To fix, cancel all subscriptions and asynchronous ' +
         'tasks in the componentWillUnmount method.\n' +
@@ -428,12 +428,13 @@ describe('ReactCompositeComponent', () => {
     expect(() => {
       expect(() => {
         ReactDOM.render(<ClassWithRenderNotExtended />, container);
-      }).toWarnDev(
-        'Warning: The <ClassWithRenderNotExtended /> component appears to have a render method, ' +
-          "but doesn't extend React.Component. This is likely to cause errors. " +
-          'Change ClassWithRenderNotExtended to extend React.Component instead.',
-      );
-    }).toThrow(TypeError);
+      }).toThrow(TypeError);
+    }).toWarnDev(
+      'Warning: The <ClassWithRenderNotExtended /> component appears to have a render method, ' +
+        "but doesn't extend React.Component. This is likely to cause errors. " +
+        'Change ClassWithRenderNotExtended to extend React.Component instead.',
+      {withoutStack: true},
+    );
 
     // Test deduplication
     expect(() => {
@@ -1728,11 +1729,37 @@ describe('ReactCompositeComponent', () => {
     expect(() => {
       expect(() => {
         ReactTestUtils.renderIntoDocument(<RenderTextInvalidConstructor />);
-      }).toWarnDev(
+      }).toThrow();
+    }).toWarnDev(
+      [
+        // Expect two errors because invokeGuardedCallback will dispatch an error event,
+        // Causing the warning to be logged again.
         'Warning: RenderTextInvalidConstructor(...): No `render` method found on the returned component instance: ' +
           'did you accidentally return an object from the constructor?',
-      );
-    }).toThrow();
+        'Warning: RenderTextInvalidConstructor(...): No `render` method found on the returned component instance: ' +
+          'did you accidentally return an object from the constructor?',
+      ],
+      {withoutStack: true},
+    );
+  });
+
+  it('should warn about reassigning this.props while rendering', () => {
+    class Bad extends React.Component {
+      componentDidMount() {}
+      componentDidUpdate() {}
+      render() {
+        this.props = {...this.props};
+        return null;
+      }
+    }
+
+    const container = document.createElement('div');
+    expect(() => {
+      ReactDOM.render(<Bad />, container);
+    }).toWarnDev(
+      'It looks like Bad is reassigning its own `this.props` while rendering. ' +
+        'This is not supported and can lead to confusing bugs.',
+    );
   });
 
   it('should return error if render is not defined', () => {
@@ -1741,10 +1768,31 @@ describe('ReactCompositeComponent', () => {
     expect(() => {
       expect(() => {
         ReactTestUtils.renderIntoDocument(<RenderTestUndefinedRender />);
-      }).toWarnDev(
+      }).toThrow();
+    }).toWarnDev(
+      [
+        // Expect two errors because invokeGuardedCallback will dispatch an error event,
+        // Causing the warning to be logged again.
         'Warning: RenderTestUndefinedRender(...): No `render` method found on the returned ' +
           'component instance: you may have forgotten to define `render`.',
-      );
-    }).toThrow();
+        'Warning: RenderTestUndefinedRender(...): No `render` method found on the returned ' +
+          'component instance: you may have forgotten to define `render`.',
+      ],
+      {withoutStack: true},
+    );
+  });
+
+  // Regression test for accidental breaking change
+  // https://github.com/facebook/react/issues/13580
+  it('should support classes shadowing isReactComponent', () => {
+    class Shadow extends React.Component {
+      isReactComponent() {}
+      render() {
+        return <div />;
+      }
+    }
+    const container = document.createElement('div');
+    ReactDOM.render(<Shadow />, container);
+    expect(container.firstChild.tagName).toBe('DIV');
   });
 });

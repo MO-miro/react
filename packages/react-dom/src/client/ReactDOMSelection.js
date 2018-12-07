@@ -1,12 +1,11 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 import getNodeForCharacterOffset from './getNodeForCharacterOffset';
-import getTextContentAccessor from './getTextContentAccessor';
 import {TEXT_NODE} from '../shared/HTMLNodeType';
 
 /**
@@ -153,9 +152,17 @@ export function getModernOffsetsFromPoints(
  */
 export function setOffsets(node, offsets) {
   const doc = node.ownerDocument || document;
-  const win = doc ? doc.defaultView : window;
+  const win = (doc && doc.defaultView) || window;
+
+  // Edge fails with "Object expected" in some scenarios.
+  // (For instance: TinyMCE editor used in a list component that supports pasting to add more,
+  // fails when pasting 100+ items)
+  if (!win.getSelection) {
+    return;
+  }
+
   const selection = win.getSelection();
-  const length = node[getTextContentAccessor()].length;
+  const length = node.textContent.length;
   let start = Math.min(offsets.start, length);
   let end = offsets.end === undefined ? start : Math.min(offsets.end, length);
 

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-import * as EventPluginHub from 'events/EventPluginHub';
+import {runEventsInBatch} from 'events/EventPluginHub';
 import {accumulateTwoPhaseDispatches} from 'events/EventPropagators';
 import {enqueueStateRestore} from 'events/ReactControlledComponent';
 import {batchedUpdates} from 'events/ReactGenericBatching';
@@ -26,8 +26,9 @@ import {
 import getEventTarget from './getEventTarget';
 import isEventSupported from './isEventSupported';
 import {getNodeFromInstance} from '../client/ReactDOMComponentTree';
-import * as inputValueTracking from '../client/inputValueTracking';
-import {setDefaultValue} from '../client/ReactDOMFiberInput';
+import {updateValueIfChanged} from '../client/inputValueTracking';
+import {setDefaultValue} from '../client/ReactDOMInput';
+import {disableInputAttributeSyncing} from 'shared/ReactFeatureFlags';
 
 const eventTypes = {
   change: {
@@ -99,12 +100,12 @@ function manualDispatchChangeEvent(nativeEvent) {
 }
 
 function runEventInBatch(event) {
-  EventPluginHub.runEventsInBatch(event, false);
+  runEventsInBatch(event);
 }
 
 function getInstIfValueChanged(targetInst) {
   const targetNode = getNodeFromInstance(targetInst);
-  if (inputValueTracking.updateValueIfChanged(targetNode)) {
+  if (updateValueIfChanged(targetNode)) {
     return targetInst;
   }
 }
@@ -238,8 +239,10 @@ function handleControlledInputBlur(node) {
     return;
   }
 
-  // If controlled, assign the value attribute to the current value on blur
-  setDefaultValue(node, 'number', node.value);
+  if (!disableInputAttributeSyncing) {
+    // If controlled, assign the value attribute to the current value on blur
+    setDefaultValue(node, 'number', node.value);
+  }
 }
 
 /**

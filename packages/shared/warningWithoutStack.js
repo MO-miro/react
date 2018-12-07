@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -22,11 +22,22 @@ if (__DEV__) {
           'message argument',
       );
     }
+    if (args.length > 8) {
+      // Check before the condition to catch violations early.
+      throw new Error(
+        'warningWithoutStack() currently supports at most 8 arguments.',
+      );
+    }
     if (condition) {
       return;
     }
     if (typeof console !== 'undefined') {
-      console.error('Warning: ' + format, ...args);
+      const argsWithFormat = args.map(item => '' + item);
+      argsWithFormat.unshift('Warning: ' + format);
+
+      // We intentionally don't use spread (or .apply) directly because it
+      // breaks IE9: https://github.com/facebook/react/issues/13610
+      Function.prototype.apply.call(console.error, console, argsWithFormat);
     }
     try {
       // --- Welcome to debugging React ---

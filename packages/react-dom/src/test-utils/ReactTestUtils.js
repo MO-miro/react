@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,28 +8,37 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import {findCurrentFiberUsingSlowPath} from 'react-reconciler/reflection';
-import * as ReactInstanceMap from 'shared/ReactInstanceMap';
+import {get as getInstance} from 'shared/ReactInstanceMap';
 import {
   ClassComponent,
-  FunctionalComponent,
+  FunctionComponent,
   HostComponent,
   HostText,
-} from 'shared/ReactTypeOfWork';
+} from 'shared/ReactWorkTags';
 import SyntheticEvent from 'events/SyntheticEvent';
 import invariant from 'shared/invariant';
 import lowPriorityWarning from 'shared/lowPriorityWarning';
-
+import {ELEMENT_NODE} from '../shared/HTMLNodeType';
 import * as DOMTopLevelEventTypes from '../events/DOMTopLevelEventTypes';
 
 const {findDOMNode} = ReactDOM;
-const {
-  EventPluginHub,
-  EventPluginRegistry,
-  EventPropagators,
-  ReactControlledComponent,
-  ReactDOMComponentTree,
-  ReactDOMEventListener,
-} = ReactDOM.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+// Keep in sync with ReactDOMUnstableNativeDependencies.js
+// and ReactDOM.js:
+const [
+  getInstanceFromNode,
+  /* eslint-disable no-unused-vars */
+  getNodeFromInstance,
+  getFiberCurrentPropsFromNode,
+  injectEventPluginsByName,
+  /* eslint-enable no-unused-vars */
+  eventNameDispatchConfigs,
+  accumulateTwoPhaseDispatches,
+  accumulateDirectDispatches,
+  enqueueStateRestore,
+  restoreStateIfNeeded,
+  dispatchEvent,
+  runEventsInBatch,
+] = ReactDOM.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.Events;
 
 function Event(suffix) {}
 
@@ -48,7 +57,7 @@ let hasWarnedAboutDeprecatedMockComponent = false;
  */
 function simulateNativeEventOnNode(topLevelType, node, fakeNativeEvent) {
   fakeNativeEvent.target = node;
-  ReactDOMEventListener.dispatchEvent(topLevelType, fakeNativeEvent);
+  dispatchEvent(topLevelType, fakeNativeEvent);
 }
 
 /**
@@ -81,7 +90,7 @@ function findAllInRenderedFiberTreeInternal(fiber, test) {
       node.tag === HostComponent ||
       node.tag === HostText ||
       node.tag === ClassComponent ||
-      node.tag === FunctionalComponent
+      node.tag === FunctionComponent
     ) {
       const publicInst = node.stateNode;
       if (test(publicInst)) {
@@ -105,6 +114,35 @@ function findAllInRenderedFiberTreeInternal(fiber, test) {
     node.sibling.return = node.return;
     node = node.sibling;
   }
+}
+
+function validateClassInstance(inst, methodName) {
+  if (!inst) {
+    // This is probably too relaxed but it's existing behavior.
+    return;
+  }
+  if (getInstance(inst)) {
+    // This is a public instance indeed.
+    return;
+  }
+  let received;
+  const stringified = '' + inst;
+  if (Array.isArray(inst)) {
+    received = 'an array';
+  } else if (inst && inst.nodeType === ELEMENT_NODE && inst.tagName) {
+    received = 'a DOM node';
+  } else if (stringified === '[object Object]') {
+    received = 'object with keys {' + Object.keys(inst).join(', ') + '}';
+  } else {
+    received = stringified;
+  }
+  invariant(
+    false,
+    '%s(...): the first argument must be a React class instance. ' +
+      'Instead received: %s.',
+    methodName,
+    received,
+  );
 }
 
 /**
@@ -136,7 +174,7 @@ const ReactTestUtils = {
   },
 
   isDOMComponent: function(inst) {
-    return !!(inst && inst.nodeType === 1 && inst.tagName);
+    return !!(inst && inst.nodeType === ELEMENT_NODE && inst.tagName);
   },
 
   isDOMComponentElement: function(inst) {
@@ -160,20 +198,17 @@ const ReactTestUtils = {
     if (!ReactTestUtils.isCompositeComponent(inst)) {
       return false;
     }
-    const internalInstance = ReactInstanceMap.get(inst);
+    const internalInstance = getInstance(inst);
     const constructor = internalInstance.type;
     return constructor === type;
   },
 
   findAllInRenderedTree: function(inst, test) {
+    validateClassInstance(inst, 'findAllInRenderedTree');
     if (!inst) {
       return [];
     }
-    invariant(
-      ReactTestUtils.isCompositeComponent(inst),
-      'findAllInRenderedTree(...): instance must be a composite component',
-    );
-    const internalInstance = ReactInstanceMap.get(inst);
+    const internalInstance = getInstance(inst);
     return findAllInRenderedFiberTreeInternal(internalInstance, test);
   },
 
@@ -183,6 +218,7 @@ const ReactTestUtils = {
    * @return {array} an array of all the matches.
    */
   scryRenderedDOMComponentsWithClass: function(root, classNames) {
+    validateClassInstance(root, 'scryRenderedDOMComponentsWithClass');
     return ReactTestUtils.findAllInRenderedTree(root, function(inst) {
       if (ReactTestUtils.isDOMComponent(inst)) {
         let className = inst.className;
@@ -215,6 +251,7 @@ const ReactTestUtils = {
    * @return {!ReactDOMComponent} The one match.
    */
   findRenderedDOMComponentWithClass: function(root, className) {
+    validateClassInstance(root, 'findRenderedDOMComponentWithClass');
     const all = ReactTestUtils.scryRenderedDOMComponentsWithClass(
       root,
       className,
@@ -237,6 +274,7 @@ const ReactTestUtils = {
    * @return {array} an array of all the matches.
    */
   scryRenderedDOMComponentsWithTag: function(root, tagName) {
+    validateClassInstance(root, 'scryRenderedDOMComponentsWithTag');
     return ReactTestUtils.findAllInRenderedTree(root, function(inst) {
       return (
         ReactTestUtils.isDOMComponent(inst) &&
@@ -252,6 +290,7 @@ const ReactTestUtils = {
    * @return {!ReactDOMComponent} The one match.
    */
   findRenderedDOMComponentWithTag: function(root, tagName) {
+    validateClassInstance(root, 'findRenderedDOMComponentWithTag');
     const all = ReactTestUtils.scryRenderedDOMComponentsWithTag(root, tagName);
     if (all.length !== 1) {
       throw new Error(
@@ -270,6 +309,7 @@ const ReactTestUtils = {
    * @return {array} an array of all the matches.
    */
   scryRenderedComponentsWithType: function(root, componentType) {
+    validateClassInstance(root, 'scryRenderedComponentsWithType');
     return ReactTestUtils.findAllInRenderedTree(root, function(inst) {
       return ReactTestUtils.isCompositeComponentWithType(inst, componentType);
     });
@@ -282,6 +322,7 @@ const ReactTestUtils = {
    * @return {!ReactComponent} The one match.
    */
   findRenderedComponentWithType: function(root, componentType) {
+    validateClassInstance(root, 'findRenderedComponentWithType');
     const all = ReactTestUtils.scryRenderedComponentsWithType(
       root,
       componentType,
@@ -363,8 +404,7 @@ function makeSimulator(eventType) {
         'a component instance. Pass the DOM node you wish to simulate the event on instead.',
     );
 
-    const dispatchConfig =
-      EventPluginRegistry.eventNameDispatchConfigs[eventType];
+    const dispatchConfig = eventNameDispatchConfigs[eventType];
 
     const fakeNativeEvent = new Event();
     fakeNativeEvent.target = domNode;
@@ -372,7 +412,7 @@ function makeSimulator(eventType) {
 
     // We don't use SyntheticEvent.getPooled in order to not have to worry about
     // properly destroying any properties assigned from `eventData` upon release
-    const targetInst = ReactDOMComponentTree.getInstanceFromNode(domNode);
+    const targetInst = getInstanceFromNode(domNode);
     const event = new SyntheticEvent(
       dispatchConfig,
       targetInst,
@@ -386,18 +426,18 @@ function makeSimulator(eventType) {
     Object.assign(event, eventData);
 
     if (dispatchConfig.phasedRegistrationNames) {
-      EventPropagators.accumulateTwoPhaseDispatches(event);
+      accumulateTwoPhaseDispatches(event);
     } else {
-      EventPropagators.accumulateDirectDispatches(event);
+      accumulateDirectDispatches(event);
     }
 
     ReactDOM.unstable_batchedUpdates(function() {
       // Normally extractEvent enqueues a state restore, but we'll just always
       // do that since we we're by-passing it here.
-      ReactControlledComponent.enqueueStateRestore(domNode);
-      EventPluginHub.runEventsInBatch(event, true);
+      enqueueStateRestore(domNode);
+      runEventsInBatch(event);
     });
-    ReactControlledComponent.restoreStateIfNeeded();
+    restoreStateIfNeeded();
   };
 }
 
@@ -405,7 +445,7 @@ function buildSimulators() {
   ReactTestUtils.Simulate = {};
 
   let eventType;
-  for (eventType in EventPluginRegistry.eventNameDispatchConfigs) {
+  for (eventType in eventNameDispatchConfigs) {
     /**
      * @param {!Element|ReactDOMComponent} domComponentOrNode
      * @param {?object} eventData Fake event data to use in SyntheticEvent.
@@ -413,19 +453,6 @@ function buildSimulators() {
     ReactTestUtils.Simulate[eventType] = makeSimulator(eventType);
   }
 }
-
-// Rebuild ReactTestUtils.Simulate whenever event plugins are injected
-const oldInjectEventPluginOrder =
-  EventPluginHub.injection.injectEventPluginOrder;
-EventPluginHub.injection.injectEventPluginOrder = function() {
-  oldInjectEventPluginOrder.apply(this, arguments);
-  buildSimulators();
-};
-const oldInjectEventPlugins = EventPluginHub.injection.injectEventPluginsByName;
-EventPluginHub.injection.injectEventPluginsByName = function() {
-  oldInjectEventPlugins.apply(this, arguments);
-  buildSimulators();
-};
 
 buildSimulators();
 

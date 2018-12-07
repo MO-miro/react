@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,7 +7,7 @@
 
 import getActiveElement from './getActiveElement';
 
-import * as ReactDOMSelection from './ReactDOMSelection';
+import {getOffsets, setOffsets} from './ReactDOMSelection';
 import {ELEMENT_NODE, TEXT_NODE} from '../shared/HTMLNodeType';
 
 function isTextNode(node) {
@@ -152,7 +152,7 @@ export function getSelection(input) {
     };
   } else {
     // Content editable or old IE textarea.
-    selection = ReactDOMSelection.getOffsets(input);
+    selection = getOffsets(input);
   }
 
   return selection || {start: 0, end: 0};
@@ -174,6 +174,6 @@ export function setSelection(input, offsets) {
     input.selectionStart = start;
     input.selectionEnd = Math.min(end, input.value.length);
   } else {
-    ReactDOMSelection.setOffsets(input, offsets);
+    setOffsets(input, offsets);
   }
 }

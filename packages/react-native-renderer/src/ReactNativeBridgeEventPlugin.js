@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,15 +13,13 @@ import {
   accumulateDirectDispatches,
 } from 'events/EventPropagators';
 import type {TopLevelType} from 'events/TopLevelEventTypes';
-import * as ReactNativeViewConfigRegistry from 'ReactNativeViewConfigRegistry';
-import SyntheticEvent from 'events/SyntheticEvent';
-import invariant from 'shared/invariant';
-
-const {
+import {
   customBubblingEventTypes,
   customDirectEventTypes,
   eventTypes,
-} = ReactNativeViewConfigRegistry;
+} from 'ReactNativeViewConfigRegistry';
+import SyntheticEvent from 'events/SyntheticEvent';
+import invariant from 'shared/invariant';
 
 const ReactNativeBridgeEventPlugin = {
   eventTypes: eventTypes,

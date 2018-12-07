@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -14,6 +14,7 @@ import shallowEqual from 'shared/shallowEqual';
 import {
   TOP_BLUR,
   TOP_CONTEXT_MENU,
+  TOP_DRAG_END,
   TOP_FOCUS,
   TOP_KEY_DOWN,
   TOP_KEY_UP,
@@ -24,7 +25,7 @@ import {
 import {isListeningToAllDependencies} from './ReactBrowserEventEmitter';
 import getActiveElement from '../client/getActiveElement';
 import {getNodeFromInstance} from '../client/ReactDOMComponentTree';
-import * as ReactInputSelection from '../client/ReactInputSelection';
+import {hasSelectionCapabilities} from '../client/ReactInputSelection';
 import {DOCUMENT_NODE} from '../shared/HTMLNodeType';
 
 const skipSelectionChangeEvent =
@@ -39,6 +40,7 @@ const eventTypes = {
     dependencies: [
       TOP_BLUR,
       TOP_CONTEXT_MENU,
+      TOP_DRAG_END,
       TOP_FOCUS,
       TOP_KEY_DOWN,
       TOP_KEY_UP,
@@ -64,10 +66,7 @@ let mouseDown = false;
  * @return {object}
  */
 function getSelection(node) {
-  if (
-    'selectionStart' in node &&
-    ReactInputSelection.hasSelectionCapabilities(node)
-  ) {
+  if ('selectionStart' in node && hasSelectionCapabilities(node)) {
     return {
       start: node.selectionStart,
       end: node.selectionEnd,
@@ -200,6 +199,7 @@ const SelectEventPlugin = {
         break;
       case TOP_CONTEXT_MENU:
       case TOP_MOUSE_UP:
+      case TOP_DRAG_END:
         mouseDown = false;
         return constructSelectEvent(nativeEvent, nativeEventTarget);
       // Chrome and IE fire non-standard event when selection is changed (and

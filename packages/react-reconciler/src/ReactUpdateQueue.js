@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -88,12 +88,8 @@ import type {Fiber} from './ReactFiber';
 import type {ExpirationTime} from './ReactFiberExpirationTime';
 
 import {NoWork} from './ReactFiberExpirationTime';
-import {
-  Callback,
-  ShouldCapture,
-  DidCapture,
-} from 'shared/ReactTypeOfSideEffect';
-import {ClassComponent} from 'shared/ReactTypeOfWork';
+import {Callback, ShouldCapture, DidCapture} from 'shared/ReactSideEffectTags';
+import {ClassComponent} from 'shared/ReactWorkTags';
 
 import {
   debugRenderPhaseSideEffects,
@@ -443,6 +439,7 @@ function getStateFromUpdate<State>(
       return Object.assign({}, prevState, partialState);
     }
     case ForceUpdate: {
+      debugger;
       hasForceUpdate = true;
       return prevState;
     }
@@ -484,10 +481,7 @@ export function processUpdateQueue<State>(
   let resultState = newBaseState;
   while (update !== null) {
     const updateExpirationTime = update.expirationTime;
-    if (updateExpirationTime > renderExpirationTime) {
-      console.log('processUpdateQueue 没有足够高优先级的情况 这里考虑下，没有足够高优先级处理方式是什么呢？');
-      debugger;
-      // 这个更新没有足够的优先级，跳过他
+    if (updateExpirationTime < renderExpirationTime) {
       // This update does not have sufficient priority. Skip it.
       if (newFirstUpdate === null) {
         // 这是第一个被跳过的更新，处于更新队列的第一个更新
@@ -501,10 +495,7 @@ export function processUpdateQueue<State>(
       }
       // Since this update will remain in the list, update the remaining
       // expiration time.
-      if (
-        newExpirationTime === NoWork ||
-        newExpirationTime > updateExpirationTime
-      ) {
+      if (newExpirationTime < updateExpirationTime) {
         newExpirationTime = updateExpirationTime;
       }
     } else {
@@ -543,7 +534,7 @@ export function processUpdateQueue<State>(
     console.log('processUpdateQueue firstCapturedUpdate 这又是啥子？');
     console.log('好像报错的时候才会执行到这里');
     const updateExpirationTime = update.expirationTime;
-    if (updateExpirationTime > renderExpirationTime) {
+    if (updateExpirationTime < renderExpirationTime) {
       // This update does not have sufficient priority. Skip it.
       if (newFirstCapturedUpdate === null) {
         // This is the first skipped captured update. It will be the first
@@ -557,10 +548,7 @@ export function processUpdateQueue<State>(
       }
       // Since this update will remain in the list, update the remaining
       // expiration time.
-      if (
-        newExpirationTime === NoWork ||
-        newExpirationTime > updateExpirationTime
-      ) {
+      if (newExpirationTime < updateExpirationTime) {
         newExpirationTime = updateExpirationTime;
       }
     } else {
@@ -665,19 +653,17 @@ export function commitUpdateQueue<State>(
   }
 
   // Commit the effects
-  let effect = finishedQueue.firstEffect;
+  commitUpdateEffects(finishedQueue.firstEffect, instance);
   finishedQueue.firstEffect = finishedQueue.lastEffect = null;
-  while (effect !== null) {
-    const callback = effect.callback;
-    if (callback !== null) {
-      effect.callback = null;
-      callCallback(callback, instance);
-    }
-    effect = effect.nextEffect;
-  }
 
-  effect = finishedQueue.firstCapturedEffect;
+  commitUpdateEffects(finishedQueue.firstCapturedEffect, instance);
   finishedQueue.firstCapturedEffect = finishedQueue.lastCapturedEffect = null;
+}
+
+function commitUpdateEffects<State>(
+  effect: Update<State> | null,
+  instance: any,
+): void {
   while (effect !== null) {
     const callback = effect.callback;
     if (callback !== null) {

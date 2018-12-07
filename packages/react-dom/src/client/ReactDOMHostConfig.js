@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,14 +7,29 @@
  * @flow
  */
 
-import * as ReactScheduler from 'shared/ReactScheduler';
-
-import * as ReactDOMComponentTree from './ReactDOMComponentTree';
-import * as ReactDOMFiberComponent from './ReactDOMFiberComponent';
-import * as ReactInputSelection from './ReactInputSelection';
+import {precacheFiberNode, updateFiberProps} from './ReactDOMComponentTree';
+import {
+  createElement,
+  createTextNode,
+  setInitialProperties,
+  diffProperties,
+  updateProperties,
+  diffHydratedProperties,
+  diffHydratedText,
+  trapClickOnNonInteractiveElement,
+  warnForUnmatchedText,
+  warnForDeletedHydratableElement,
+  warnForDeletedHydratableText,
+  warnForInsertedHydratedElement,
+  warnForInsertedHydratedText,
+} from './ReactDOMComponent';
+import {getSelectionInformation, restoreSelection} from './ReactInputSelection';
 import setTextContent from './setTextContent';
 import {validateDOMNesting, updatedAncestorInfo} from './validateDOMNesting';
-import * as ReactBrowserEventEmitter from '../events/ReactBrowserEventEmitter';
+import {
+  isEnabled as ReactBrowserEventEmitterIsEnabled,
+  setEnabled as ReactBrowserEventEmitterSetEnabled,
+} from '../events/ReactBrowserEventEmitter';
 import {getChildNamespace} from '../shared/DOMNamespaces';
 import {
   ELEMENT_NODE,
@@ -23,6 +38,9 @@ import {
   DOCUMENT_NODE,
   DOCUMENT_FRAGMENT_NODE,
 } from '../shared/HTMLNodeType';
+import dangerousStyleValue from '../shared/dangerousStyleValue';
+
+import type {DOMContainer} from './ReactDOM';
 
 export type Type = string;
 export type Props = {
@@ -31,6 +49,9 @@ export type Props = {
   hidden?: boolean,
   suppressHydrationWarning?: boolean,
   dangerouslySetInnerHTML?: mixed,
+  style?: {
+    display?: string,
+  },
 };
 export type Container = Element | Document;
 export type Instance = Element;
@@ -48,26 +69,19 @@ export type ChildSet = void; // Unused
 export type TimeoutHandle = TimeoutID;
 export type NoTimeout = -1;
 
-const {
-  createElement,
-  createTextNode,
-  setInitialProperties,
-  diffProperties,
-  updateProperties,
-  diffHydratedProperties,
-  diffHydratedText,
-  warnForUnmatchedText,
-  warnForDeletedHydratableElement,
-  warnForDeletedHydratableText,
-  warnForInsertedHydratedElement,
-  warnForInsertedHydratedText,
-} = ReactDOMFiberComponent;
-const {precacheFiberNode, updateFiberProps} = ReactDOMComponentTree;
+export {
+  unstable_now as now,
+  unstable_scheduleCallback as scheduleDeferredCallback,
+  unstable_shouldYield as shouldYield,
+  unstable_cancelCallback as cancelDeferredCallback,
+} from 'scheduler';
 
 let SUPPRESS_HYDRATION_WARNING;
 if (__DEV__) {
   SUPPRESS_HYDRATION_WARNING = 'suppressHydrationWarning';
 }
+
+const STYLE = 'style';
 
 let eventsEnabled: ?boolean = null;
 let selectionInformation: ?mixed = null;
@@ -141,15 +155,15 @@ export function getPublicInstance(instance: Instance): * {
 }
 
 export function prepareForCommit(containerInfo: Container): void {
-  eventsEnabled = ReactBrowserEventEmitter.isEnabled();
-  selectionInformation = ReactInputSelection.getSelectionInformation();
-  ReactBrowserEventEmitter.setEnabled(false);
+  eventsEnabled = ReactBrowserEventEmitterIsEnabled();
+  selectionInformation = getSelectionInformation();
+  ReactBrowserEventEmitterSetEnabled(false);
 }
 
 export function resetAfterCommit(containerInfo: Container): void {
-  ReactInputSelection.restoreSelection(selectionInformation);
+  restoreSelection(selectionInformation);
   selectionInformation = null;
-  ReactBrowserEventEmitter.setEnabled(eventsEnabled);
+  ReactBrowserEventEmitterSetEnabled(eventsEnabled);
   eventsEnabled = null;
 }
 
@@ -245,11 +259,12 @@ export function shouldSetTextContent(type: string, props: Props): boolean {
   return (
     type === 'textarea' ||
     type === 'option' ||
+    type === 'noscript' ||
     typeof props.children === 'string' ||
     typeof props.children === 'number' ||
     (typeof props.dangerouslySetInnerHTML === 'object' &&
       props.dangerouslySetInnerHTML !== null &&
-      typeof props.dangerouslySetInnerHTML.__html === 'string')
+      props.dangerouslySetInnerHTML.__html != null)
   );
 }
 
@@ -272,13 +287,14 @@ export function createTextInstance(
   return textNode;
 }
 
-export const now = ReactScheduler.now;
 export const isPrimaryRenderer = true;
-export const scheduleDeferredCallback = ReactScheduler.scheduleWork;
-export const cancelDeferredCallback = ReactScheduler.cancelScheduledWork;
-
-export const scheduleTimeout = setTimeout;
-export const cancelTimeout = clearTimeout;
+// This initialization code may run even on server environments
+// if a component just imports ReactDOM (e.g. for findDOMNode).
+// Some environments might not have setTimeout or clearTimeout.
+export const scheduleTimeout =
+  typeof setTimeout === 'function' ? setTimeout : (undefined: any);
+export const cancelTimeout =
+  typeof clearTimeout === 'function' ? clearTimeout : (undefined: any);
 export const noTimeout = -1;
 
 // -------------------
@@ -346,14 +362,33 @@ export function appendChild(
  * @JSONZ 执行effect，在container加入childDom
  */
 export function appendChildToContainer(
-  container: Container,
+  container: DOMContainer,
   child: Instance | TextInstance,
 ): void {
   console.log('appendChildToContainer', {container, child});
+  let parentNode;
   if (container.nodeType === COMMENT_NODE) {
-    (container.parentNode: any).insertBefore(child, container);
+    parentNode = (container.parentNode: any);
+    parentNode.insertBefore(child, container);
   } else {
-    container.appendChild(child);
+    parentNode = container;
+    parentNode.appendChild(child);
+  }
+  // This container might be used for a portal.
+  // If something inside a portal is clicked, that click should bubble
+  // through the React tree. However, on Mobile Safari the click would
+  // never bubble through the *DOM* tree unless an ancestor with onclick
+  // event exists. So we wouldn't see it and dispatch it.
+  // This is why we ensure that non React root containers have inline onclick
+  // defined.
+  // https://github.com/facebook/react/issues/11918
+  const reactRootContainer = container._reactRootContainer;
+  if (
+    (reactRootContainer === null || reactRootContainer === undefined) &&
+    parentNode.onclick === null
+  ) {
+    // TODO: This cast may not be sound for SVG, MathML or custom elements.
+    trapClickOnNonInteractiveElement(((parentNode: any): HTMLElement));
   }
 }
 
@@ -393,6 +428,36 @@ export function removeChildFromContainer(
   } else {
     container.removeChild(child);
   }
+}
+
+export function hideInstance(instance: Instance): void {
+  // TODO: Does this work for all element types? What about MathML? Should we
+  // pass host context to this method?
+  instance = ((instance: any): HTMLElement);
+  instance.style.display = 'none';
+}
+
+export function hideTextInstance(textInstance: TextInstance): void {
+  textInstance.nodeValue = '';
+}
+
+export function unhideInstance(instance: Instance, props: Props): void {
+  instance = ((instance: any): HTMLElement);
+  const styleProp = props[STYLE];
+  const display =
+    styleProp !== undefined &&
+    styleProp !== null &&
+    styleProp.hasOwnProperty('display')
+      ? styleProp.display
+      : null;
+  instance.style.display = dangerousStyleValue('display', display);
+}
+
+export function unhideTextInstance(
+  textInstance: TextInstance,
+  text: string,
+): void {
+  textInstance.nodeValue = text;
 }
 
 // -------------------
@@ -522,7 +587,7 @@ export function didNotHydrateContainerInstance(
   instance: Instance | TextInstance,
 ) {
   if (__DEV__) {
-    if (instance.nodeType === 1) {
+    if (instance.nodeType === ELEMENT_NODE) {
       warnForDeletedHydratableElement(parentContainer, (instance: any));
     } else {
       warnForDeletedHydratableText(parentContainer, (instance: any));
@@ -537,7 +602,7 @@ export function didNotHydrateInstance(
   instance: Instance | TextInstance,
 ) {
   if (__DEV__ && parentProps[SUPPRESS_HYDRATION_WARNING] !== true) {
-    if (instance.nodeType === 1) {
+    if (instance.nodeType === ELEMENT_NODE) {
       warnForDeletedHydratableElement(parentInstance, (instance: any));
     } else {
       warnForDeletedHydratableText(parentInstance, (instance: any));

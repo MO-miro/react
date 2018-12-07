@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,12 +7,12 @@
  * @flow
  */
 
-import type {Fiber} from 'react-reconciler/src/ReactFiber';
+import type {Fiber} from './ReactFiber';
 
 import invariant from 'shared/invariant';
 import warningWithoutStack from 'shared/warningWithoutStack';
 
-import * as ReactInstanceMap from 'shared/ReactInstanceMap';
+import {get as getInstance} from 'shared/ReactInstanceMap';
 import ReactSharedInternals from 'shared/ReactSharedInternals';
 import getComponentName from 'shared/getComponentName';
 import {
@@ -21,8 +21,8 @@ import {
   HostRoot,
   HostPortal,
   HostText,
-} from 'shared/ReactTypeOfWork';
-import {NoEffect, Placement} from 'shared/ReactTypeOfSideEffect';
+} from 'shared/ReactWorkTags';
+import {NoEffect, Placement} from 'shared/ReactSideEffectTags';
 
 const ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
 
@@ -82,7 +82,7 @@ export function isMounted(component: React$Component<any, any>): boolean {
     }
   }
 
-  const fiber: ?Fiber = ReactInstanceMap.get(component);
+  const fiber: ?Fiber = getInstance(component);
   if (!fiber) {
     return false;
   }

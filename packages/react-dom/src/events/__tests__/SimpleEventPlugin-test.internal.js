@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -36,7 +36,7 @@ describe('SimpleEventPlugin', function() {
 
   beforeEach(function() {
     // TODO pull this into helper method, reduce repetition.
-    // mock the browser APIs which are used in react-scheduler:
+    // mock the browser APIs which are used in schedule:
     // - requestAnimationFrame should pass the DOMHighResTimeStamp argument
     // - calling 'window.postMessage' should actually fire postmessage handlers
     global.requestAnimationFrame = function(cb) {
@@ -426,9 +426,9 @@ describe('SimpleEventPlugin', function() {
                 // Intentionally not using the updater form here
                 () => this.setState({highPriCount: this.state.highPriCount + 1})
               }>
-              <React.unstable_AsyncMode>
+              <React.unstable_ConcurrentMode>
                 <Button highPriCount={this.state.highPriCount} />
-              </React.unstable_AsyncMode>
+              </React.unstable_ConcurrentMode>
             </div>
           );
         }

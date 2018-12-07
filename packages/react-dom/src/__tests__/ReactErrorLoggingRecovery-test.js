@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -18,12 +18,6 @@ if (global.window) {
 // The issue only reproduced when React was loaded before JSDOM.
 const React = require('react');
 const ReactDOM = require('react-dom');
-
-// Unlike other tests, we want to enable error logging.
-// Note this is not a real Error prototype property,
-// it's only set in our Jest environment.
-// eslint-disable-next-line no-extend-native
-Error.prototype.suppressReactErrorLogging = false;
 
 // Initialize JSDOM separately.
 // We don't use our normal JSDOM setup because we want to load React first.

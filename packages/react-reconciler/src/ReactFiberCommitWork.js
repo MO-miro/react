@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -18,34 +18,50 @@ import type {Fiber} from './ReactFiber';
 import type {FiberRoot} from './ReactFiberRoot';
 import type {ExpirationTime} from './ReactFiberExpirationTime';
 import type {CapturedValue, CapturedError} from './ReactCapturedValue';
+import type {SuspenseState} from './ReactFiberSuspenseComponent';
+import type {FunctionComponentUpdateQueue} from './ReactFiberHooks';
 
-import {enableProfilerTimer, enableSuspense} from 'shared/ReactFeatureFlags';
 import {
+  enableHooks,
+  enableSchedulerTracing,
+  enableProfilerTimer,
+} from 'shared/ReactFeatureFlags';
+import {
+  FunctionComponent,
+  ForwardRef,
   ClassComponent,
   HostRoot,
   HostComponent,
   HostText,
   HostPortal,
   Profiler,
-  PlaceholderComponent,
-} from 'shared/ReactTypeOfWork';
-import ReactErrorUtils from 'shared/ReactErrorUtils';
+  SuspenseComponent,
+  IncompleteClassComponent,
+  MemoComponent,
+  SimpleMemoComponent,
+} from 'shared/ReactWorkTags';
 import {
-  NoEffect,
+  invokeGuardedCallback,
+  hasCaughtError,
+  clearCaughtError,
+} from 'shared/ReactErrorUtils';
+import {
   ContentReset,
   Placement,
   Snapshot,
   Update,
-} from 'shared/ReactTypeOfSideEffect';
+} from 'shared/ReactSideEffectTags';
 import getComponentName from 'shared/getComponentName';
 import invariant from 'shared/invariant';
 import warningWithoutStack from 'shared/warningWithoutStack';
+import warning from 'shared/warning';
 
-import {Sync} from './ReactFiberExpirationTime';
+import {NoWork} from './ReactFiberExpirationTime';
 import {onCommitUnmount} from './ReactFiberDevToolsHook';
 import {startPhaseTimer, stopPhaseTimer} from './ReactDebugFiberPerf';
 import {getStackByFiberInDevAndProd} from './ReactCurrentFiber';
 import {logCapturedError} from './ReactFiberErrorLogger';
+import {resolveDefaultProps} from './ReactFiberLazyComponent';
 import {getCommitTime} from './ReactProfilerTimer';
 import {commitUpdateQueue} from './ReactUpdateQueue';
 import {
@@ -64,21 +80,26 @@ import {
   removeChildFromContainer,
   replaceContainerChildren,
   createContainerChildSet,
+  hideInstance,
+  hideTextInstance,
+  unhideInstance,
+  unhideTextInstance,
 } from './ReactFiberHostConfig';
 import {
   captureCommitPhaseError,
   requestCurrentTime,
-  scheduleWork,
 } from './ReactFiberScheduler';
-import {StrictMode} from './ReactTypeOfMode';
-
-const {
-  invokeGuardedCallback,
-  hasCaughtError,
-  clearCaughtError,
-} = ReactErrorUtils;
-
-const emptyObject = {};
+import {
+  NoEffect as NoHookEffect,
+  UnmountSnapshot,
+  UnmountMutation,
+  MountMutation,
+  UnmountLayout,
+  MountLayout,
+  UnmountPassive,
+  MountPassive,
+} from './ReactHookEffectTags';
+import {didWarnAboutReassigningProps} from './ReactFiberBeginWork';
 
 let didWarnAboutUndefinedSnapshotBeforeUpdate: Set<mixed> | null = null;
 if (__DEV__) {
@@ -112,17 +133,13 @@ export function logError(boundary: Fiber, errorInfo: CapturedValue<mixed>) {
   try {
     logCapturedError(capturedError);
   } catch (e) {
-    // Prevent cycle if logCapturedError() throws.
-    // A cycle may still occur if logCapturedError renders a component that throws.
-    const suppressLogging = e && e.suppressReactErrorLogging;
-    if (!suppressLogging) {
-      // Rethrow it from a clean stack because this function is assumed to never throw.
-      // We can't safely call console.error() here because it could *also* throw if overriden.
-      // https://github.com/facebook/react/issues/13188
-      setTimeout(() => {
-        throw e;
-      });
-    }
+    // This method must not throw, or React internal state will get messed up.
+    // If console.error is overridden, or logCapturedError() shows a dialog that throws,
+    // we want to report this error outside of the normal stack as a last resort.
+    // https://github.com/facebook/react/issues/13188
+    setTimeout(() => {
+      throw e;
+    });
   }
 }
 
@@ -180,11 +197,33 @@ function safelyDetachRef(current: Fiber) {
   }
 }
 
+function safelyCallDestroy(current, destroy) {
+  if (__DEV__) {
+    invokeGuardedCallback(null, destroy, null);
+    if (hasCaughtError()) {
+      const error = clearCaughtError();
+      captureCommitPhaseError(current, error);
+    }
+  } else {
+    try {
+      destroy();
+    } catch (error) {
+      captureCommitPhaseError(current, error);
+    }
+  }
+}
+
 function commitBeforeMutationLifeCycles(
   current: Fiber | null,
   finishedWork: Fiber,
 ): void {
   switch (finishedWork.tag) {
+    case FunctionComponent:
+    case ForwardRef:
+    case SimpleMemoComponent: {
+      commitHookEffectList(UnmountSnapshot, NoHookEffect, finishedWork);
+      return;
+    }
     case ClassComponent: {
       if (finishedWork.effectTag & Snapshot) {
         if (current !== null) {
@@ -192,10 +231,38 @@ function commitBeforeMutationLifeCycles(
           const prevState = current.memoizedState;
           startPhaseTimer(finishedWork, 'getSnapshotBeforeUpdate');
           const instance = finishedWork.stateNode;
-          instance.props = finishedWork.memoizedProps;
-          instance.state = finishedWork.memoizedState;
+          // We could update instance props and state here,
+          // but instead we rely on them being set during last render.
+          // TODO: revisit this when we implement resuming.
+          if (__DEV__) {
+            if (
+              finishedWork.type === finishedWork.elementType &&
+              !didWarnAboutReassigningProps
+            ) {
+              warning(
+                instance.props === finishedWork.memoizedProps,
+                'Expected %s props to match memoized props before ' +
+                  'getSnapshotBeforeUpdate. ' +
+                  'This might either be because of a bug in React, or because ' +
+                  'a component reassigns its own `this.props`. ' +
+                  'Please file an issue.',
+                getComponentName(finishedWork.type) || 'instance',
+              );
+              warning(
+                instance.state === finishedWork.memoizedState,
+                'Expected %s state to match memoized state before ' +
+                  'getSnapshotBeforeUpdate. ' +
+                  'This might either be because of a bug in React, or because ' +
+                  'a component reassigns its own `this.props`. ' +
+                  'Please file an issue.',
+                getComponentName(finishedWork.type) || 'instance',
+              );
+            }
+          }
           const snapshot = instance.getSnapshotBeforeUpdate(
-            prevProps,
+            finishedWork.elementType === finishedWork.type
+              ? prevProps
+              : resolveDefaultProps(finishedWork.type, prevProps),
             prevState,
           );
           if (__DEV__) {
@@ -222,6 +289,7 @@ function commitBeforeMutationLifeCycles(
     case HostComponent:
     case HostText:
     case HostPortal:
+    case IncompleteClassComponent:
       // Nothing to do for these component types
       return;
     default: {
@@ -234,6 +302,70 @@ function commitBeforeMutationLifeCycles(
   }
 }
 
+function commitHookEffectList(
+  unmountTag: number,
+  mountTag: number,
+  finishedWork: Fiber,
+) {
+  if (!enableHooks) {
+    return;
+  }
+  const updateQueue: FunctionComponentUpdateQueue | null = (finishedWork.updateQueue: any);
+  let lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
+  if (lastEffect !== null) {
+    const firstEffect = lastEffect.next;
+    let effect = firstEffect;
+    do {
+      if ((effect.tag & unmountTag) !== NoHookEffect) {
+        // Unmount
+        const destroy = effect.destroy;
+        effect.destroy = null;
+        if (destroy !== null) {
+          destroy();
+        }
+      }
+      if ((effect.tag & mountTag) !== NoHookEffect) {
+        // Mount
+        const create = effect.create;
+        let destroy = create();
+        if (typeof destroy !== 'function') {
+          if (__DEV__) {
+            if (destroy !== null && destroy !== undefined) {
+              warningWithoutStack(
+                false,
+                'useEffect function must return a cleanup function or ' +
+                  'nothing.%s%s',
+                typeof destroy.then === 'function'
+                  ? '\n\nIt looks like you wrote useEffect(async () => ...) or returned a Promise. ' +
+                    'Instead, you may write an async function separately ' +
+                    'and then call it from inside the effect:\n\n' +
+                    'async function fetchComment(commentId) {\n' +
+                    '  // You can await here\n' +
+                    '}\n\n' +
+                    'useEffect(() => {\n' +
+                    '  fetchComment(commentId);\n' +
+                    '}, [commentId]);\n\n' +
+                    'In the future, React will provide a more idiomatic solution for data fetching ' +
+                    "that doesn't involve writing effects manually."
+                  : '',
+                getStackByFiberInDevAndProd(finishedWork),
+              );
+            }
+          }
+          destroy = null;
+        }
+        effect.destroy = destroy;
+      }
+      effect = effect.next;
+    } while (effect !== firstEffect);
+  }
+}
+
+export function commitPassiveHookEffects(finishedWork: Fiber): void {
+  commitHookEffectList(UnmountPassive, NoHookEffect, finishedWork);
+  commitHookEffectList(NoHookEffect, MountPassive, finishedWork);
+}
+
 function commitLifeCycles(
   finishedRoot: FiberRoot,
   current: Fiber | null,
@@ -242,21 +374,82 @@ function commitLifeCycles(
 ): void {
   console.log('commitLifeCycles');
   switch (finishedWork.tag) {
+    case FunctionComponent:
+    case ForwardRef:
+    case SimpleMemoComponent: {
+      commitHookEffectList(UnmountLayout, MountLayout, finishedWork);
+      break;
+    }
     case ClassComponent: {
       const instance = finishedWork.stateNode;
       if (finishedWork.effectTag & Update) {
         if (current === null) {
           startPhaseTimer(finishedWork, 'componentDidMount');
-          instance.props = finishedWork.memoizedProps;
-          instance.state = finishedWork.memoizedState;
+          // We could update instance props and state here,
+          // but instead we rely on them being set during last render.
+          // TODO: revisit this when we implement resuming.
+          if (__DEV__) {
+            if (
+              finishedWork.type === finishedWork.elementType &&
+              !didWarnAboutReassigningProps
+            ) {
+              warning(
+                instance.props === finishedWork.memoizedProps,
+                'Expected %s props to match memoized props before ' +
+                  'componentDidMount. ' +
+                  'This might either be because of a bug in React, or because ' +
+                  'a component reassigns its own `this.props`. ' +
+                  'Please file an issue.',
+                getComponentName(finishedWork.type) || 'instance',
+              );
+              warning(
+                instance.state === finishedWork.memoizedState,
+                'Expected %s state to match memoized state before ' +
+                  'componentDidMount. ' +
+                  'This might either be because of a bug in React, or because ' +
+                  'a component reassigns its own `this.props`. ' +
+                  'Please file an issue.',
+                getComponentName(finishedWork.type) || 'instance',
+              );
+            }
+          }
           instance.componentDidMount();
           stopPhaseTimer();
         } else {
-          const prevProps = current.memoizedProps;
+          const prevProps =
+            finishedWork.elementType === finishedWork.type
+              ? current.memoizedProps
+              : resolveDefaultProps(finishedWork.type, current.memoizedProps);
           const prevState = current.memoizedState;
           startPhaseTimer(finishedWork, 'componentDidUpdate');
-          instance.props = finishedWork.memoizedProps;
-          instance.state = finishedWork.memoizedState;
+          // We could update instance props and state here,
+          // but instead we rely on them being set during last render.
+          // TODO: revisit this when we implement resuming.
+          if (__DEV__) {
+            if (
+              finishedWork.type === finishedWork.elementType &&
+              !didWarnAboutReassigningProps
+            ) {
+              warning(
+                instance.props === finishedWork.memoizedProps,
+                'Expected %s props to match memoized props before ' +
+                  'componentDidUpdate. ' +
+                  'This might either be because of a bug in React, or because ' +
+                  'a component reassigns its own `this.props`. ' +
+                  'Please file an issue.',
+                getComponentName(finishedWork.type) || 'instance',
+              );
+              warning(
+                instance.state === finishedWork.memoizedState,
+                'Expected %s state to match memoized state before ' +
+                  'componentDidUpdate. ' +
+                  'This might either be because of a bug in React, or because ' +
+                  'a component reassigns its own `this.props`. ' +
+                  'Please file an issue.',
+                getComponentName(finishedWork.type) || 'instance',
+              );
+            }
+          }
           instance.componentDidUpdate(
             prevProps,
             prevState,
@@ -267,8 +460,34 @@ function commitLifeCycles(
       }
       const updateQueue = finishedWork.updateQueue;
       if (updateQueue !== null) {
-        instance.props = finishedWork.memoizedProps;
-        instance.state = finishedWork.memoizedState;
+        if (__DEV__) {
+          if (
+            finishedWork.type === finishedWork.elementType &&
+            !didWarnAboutReassigningProps
+          ) {
+            warning(
+              instance.props === finishedWork.memoizedProps,
+              'Expected %s props to match memoized props before ' +
+                'processing the update queue. ' +
+                'This might either be because of a bug in React, or because ' +
+                'a component reassigns its own `this.props`. ' +
+                'Please file an issue.',
+              getComponentName(finishedWork.type) || 'instance',
+            );
+            warning(
+              instance.state === finishedWork.memoizedState,
+              'Expected %s state to match memoized state before ' +
+                'processing the update queue. ' +
+                'This might either be because of a bug in React, or because ' +
+                'a component reassigns its own `this.props`. ' +
+                'Please file an issue.',
+              getComponentName(finishedWork.type) || 'instance',
+            );
+          }
+        }
+        // We could update instance props and state here,
+        // but instead we rely on them being set during last render.
+        // TODO: revisit this when we implement resuming.
         commitUpdateQueue(
           finishedWork,
           updateQueue,
@@ -325,34 +544,92 @@ function commitLifeCycles(
       return;
     }
     case Profiler: {
-      // We have no life-cycles associated with Profiler.
-      return;
-    }
-    case PlaceholderComponent: {
-      if (enableSuspense) {
-        if ((finishedWork.mode & StrictMode) === NoEffect) {
-          // In loose mode, a placeholder times out by scheduling a synchronous
-          // update in the commit phase. Use `updateQueue` field to signal that
-          // the Timeout needs to switch to the placeholder. We don't need an
-          // entire queue. Any non-null value works.
-          // $FlowFixMe - Intentionally using a value other than an UpdateQueue.
-          finishedWork.updateQueue = emptyObject;
-          scheduleWork(finishedWork, Sync);
+      if (enableProfilerTimer) {
+        const onRender = finishedWork.memoizedProps.onRender;
+
+        if (enableSchedulerTracing) {
+          onRender(
+            finishedWork.memoizedProps.id,
+            current === null ? 'mount' : 'update',
+            finishedWork.actualDuration,
+            finishedWork.treeBaseDuration,
+            finishedWork.actualStartTime,
+            getCommitTime(),
+            finishedRoot.memoizedInteractions,
+          );
         } else {
-          // In strict mode, the Update effect is used to record the time at
-          // which the placeholder timed out.
-          const currentTime = requestCurrentTime();
-          finishedWork.stateNode = {timedOutAt: currentTime};
+          onRender(
+            finishedWork.memoizedProps.id,
+            current === null ? 'mount' : 'update',
+            finishedWork.actualDuration,
+            finishedWork.treeBaseDuration,
+            finishedWork.actualStartTime,
+            getCommitTime(),
+          );
         }
       }
       return;
     }
+    case SuspenseComponent:
+      break;
+    case IncompleteClassComponent:
+      break;
     default: {
       invariant(
         false,
         'This unit of work tag should not have side-effects. This error is ' +
           'likely caused by a bug in React. Please file an issue.',
       );
+    }
+  }
+}
+
+function hideOrUnhideAllChildren(finishedWork, isHidden) {
+  if (supportsMutation) {
+    // We only have the top Fiber that was inserted but we need recurse down its
+    // children to find all the terminal nodes.
+    let node: Fiber = finishedWork;
+    while (true) {
+      if (node.tag === HostComponent) {
+        const instance = node.stateNode;
+        if (isHidden) {
+          hideInstance(instance);
+        } else {
+          unhideInstance(node.stateNode, node.memoizedProps);
+        }
+      } else if (node.tag === HostText) {
+        const instance = node.stateNode;
+        if (isHidden) {
+          hideTextInstance(instance);
+        } else {
+          unhideTextInstance(instance, node.memoizedProps);
+        }
+      } else if (
+        node.tag === SuspenseComponent &&
+        node.memoizedState !== null
+      ) {
+        // Found a nested Suspense component that timed out. Skip over the
+        // primary child fragment, which should remain hidden.
+        const fallbackChildFragment: Fiber = (node.child: any).sibling;
+        fallbackChildFragment.return = node;
+        node = fallbackChildFragment;
+        continue;
+      } else if (node.child !== null) {
+        node.child.return = node;
+        node = node.child;
+        continue;
+      }
+      if (node === finishedWork) {
+        return;
+      }
+      while (node.sibling === null) {
+        if (node.return === null || node.return === finishedWork) {
+          return;
+        }
+        node = node.return;
+      }
+      node.sibling.return = node.return;
+      node = node.sibling;
     }
   }
 }
@@ -407,6 +684,27 @@ function commitUnmount(current: Fiber): void {
   onCommitUnmount(current);
 
   switch (current.tag) {
+    case FunctionComponent:
+    case ForwardRef:
+    case MemoComponent:
+    case SimpleMemoComponent: {
+      const updateQueue: FunctionComponentUpdateQueue | null = (current.updateQueue: any);
+      if (updateQueue !== null) {
+        const lastEffect = updateQueue.lastEffect;
+        if (lastEffect !== null) {
+          const firstEffect = lastEffect.next;
+          let effect = firstEffect;
+          do {
+            const destroy = effect.destroy;
+            if (destroy !== null) {
+              safelyCallDestroy(current, destroy);
+            }
+            effect = effect.next;
+          } while (effect !== firstEffect);
+        }
+      }
+      break;
+    }
     case ClassComponent: {
       safelyDetachRef(current);
       const instance = current.stateNode;
@@ -476,9 +774,14 @@ function detachFiber(current: Fiber) {
   // itself will be GC:ed when the parent updates the next time.
   current.return = null;
   current.child = null;
-  if (current.alternate) {
-    current.alternate.child = null;
-    current.alternate.return = null;
+  current.memoizedState = null;
+  current.updateQueue = null;
+  const alternate = current.alternate;
+  if (alternate !== null) {
+    alternate.return = null;
+    alternate.child = null;
+    alternate.memoizedState = null;
+    alternate.updateQueue = null;
   }
 }
 
@@ -787,11 +1090,32 @@ function commitDeletion(current: Fiber): void {
 
 function commitWork(current: Fiber | null, finishedWork: Fiber): void {
   if (!supportsMutation) {
+    switch (finishedWork.tag) {
+      case FunctionComponent:
+      case ForwardRef:
+      case MemoComponent:
+      case SimpleMemoComponent: {
+        // Note: We currently never use MountMutation, but useLayout uses
+        // UnmountMutation.
+        commitHookEffectList(UnmountMutation, MountMutation, finishedWork);
+        return;
+      }
+    }
+
     commitContainer(finishedWork);
     return;
   }
 
   switch (finishedWork.tag) {
+    case FunctionComponent:
+    case ForwardRef:
+    case MemoComponent:
+    case SimpleMemoComponent: {
+      // Note: We currently never use MountMutation, but useLayout uses
+      // UnmountMutation.
+      commitHookEffectList(UnmountMutation, MountMutation, finishedWork);
+      return;
+    }
     case ClassComponent: {
       return;
     }
@@ -841,20 +1165,32 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
       return;
     }
     case Profiler: {
-      if (enableProfilerTimer) {
-        const onRender = finishedWork.memoizedProps.onRender;
-        onRender(
-          finishedWork.memoizedProps.id,
-          current === null ? 'mount' : 'update',
-          finishedWork.actualDuration,
-          finishedWork.treeBaseDuration,
-          finishedWork.actualStartTime,
-          getCommitTime(),
-        );
+      return;
+    }
+    case SuspenseComponent: {
+      let newState: SuspenseState | null = finishedWork.memoizedState;
+
+      let newDidTimeout;
+      let primaryChildParent = finishedWork;
+      if (newState === null) {
+        newDidTimeout = false;
+      } else {
+        newDidTimeout = true;
+        primaryChildParent = finishedWork.child;
+        if (newState.timedOutAt === NoWork) {
+          // If the children had not already timed out, record the time.
+          // This is used to compute the elapsed time during subsequent
+          // attempts to render the children.
+          newState.timedOutAt = requestCurrentTime();
+        }
+      }
+
+      if (primaryChildParent !== null) {
+        hideOrUnhideAllChildren(primaryChildParent, newDidTimeout);
       }
       return;
     }
-    case PlaceholderComponent: {
+    case IncompleteClassComponent: {
       return;
     }
     default: {

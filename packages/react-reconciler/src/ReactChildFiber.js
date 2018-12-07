@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,11 +9,11 @@
 
 import type {ReactElement} from 'shared/ReactElementType';
 import type {ReactPortal} from 'shared/ReactTypes';
-import type {Fiber} from 'react-reconciler/src/ReactFiber';
-import type {ExpirationTime} from 'react-reconciler/src/ReactFiberExpirationTime';
+import type {Fiber} from './ReactFiber';
+import type {ExpirationTime} from './ReactFiberExpirationTime';
 
 import getComponentName from 'shared/getComponentName';
-import {Placement, Deletion} from 'shared/ReactTypeOfSideEffect';
+import {Placement, Deletion} from 'shared/ReactSideEffectTags';
 import {
   getIteratorFn,
   REACT_ELEMENT_TYPE,
@@ -21,12 +21,12 @@ import {
   REACT_PORTAL_TYPE,
 } from 'shared/ReactSymbols';
 import {
-  FunctionalComponent,
+  FunctionComponent,
   ClassComponent,
   HostText,
   HostPortal,
   Fragment,
-} from 'shared/ReactTypeOfWork';
+} from 'shared/ReactWorkTags';
 import invariant from 'shared/invariant';
 import warning from 'shared/warning';
 import warningWithoutStack from 'shared/warningWithoutStack';
@@ -117,7 +117,7 @@ function coerceRef(
         if (!didWarnAboutStringRefInStrictMode[componentName]) {
           warningWithoutStack(
             false,
-            'A string ref, "%s", has been found within a strict mode tree. ' +
+            'A string ref, "%s", has been found within a strict mode tree. ' +
               'String refs are a source of potential bugs and should be avoided. ' +
               'We recommend using createRef() instead.' +
               '\n%s' +
@@ -138,7 +138,7 @@ function coerceRef(
         const ownerFiber = ((owner: any): Fiber);
         invariant(
           ownerFiber.tag === ClassComponent,
-          'Stateless function components cannot have refs.',
+          'Function components cannot have refs.',
         );
         inst = ownerFiber.stateNode;
       }
@@ -175,13 +175,13 @@ function coerceRef(
     } else {
       invariant(
         typeof mixedRef === 'string',
-        'Expected ref to be a function or a string.',
+        'Expected ref to be a function, a string, an object returned by React.createRef(), or null.',
       );
       invariant(
         element._owner,
         'Element ref was specified as a string (%s) but no owner was set. This could happen for one of' +
           ' the following reasons:\n' +
-          '1. You may be adding a ref to a functional component\n' +
+          '1. You may be adding a ref to a function component\n' +
           "2. You may be adding a ref to a component that was not created inside a component's render method\n" +
           '3. You have multiple copies of React loaded\n' +
           'See https://fb.me/react-refs-must-have-owner for more information.',
@@ -381,7 +381,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     element: ReactElement,
     expirationTime: ExpirationTime,
   ): Fiber {
-    if (current !== null && current.type === element.type) {
+    if (current !== null && current.elementType === element.type) {
       // Move based on index
       const existing = useFiber(current, element.props, expirationTime);
       existing.ref = coerceRef(returnFiber, current, element);
@@ -1144,7 +1144,7 @@ function ChildReconciler(shouldTrackSideEffects) {
         if (
           child.tag === Fragment
             ? element.type === REACT_FRAGMENT_TYPE
-            : child.type === element.type
+            : child.elementType === element.type
         ) {
           deleteRemainingChildren(returnFiber, child.sibling);
           const existing = useFiber(
@@ -1352,7 +1352,7 @@ function ChildReconciler(shouldTrackSideEffects) {
         // Intentionally fall through to the next case, which handles both
         // functions and classes
         // eslint-disable-next-lined no-fallthrough
-        case FunctionalComponent: {
+        case FunctionComponent: {
           const Component = returnFiber.type;
           invariant(
             false,

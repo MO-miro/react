@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -22,7 +22,11 @@ import {
   TOP_TEXT_INPUT,
   TOP_PASTE,
 } from './DOMTopLevelEventTypes';
-import * as FallbackCompositionState from './FallbackCompositionState';
+import {
+  getData as FallbackCompositionStateGetData,
+  initialize as FallbackCompositionStateInitialize,
+  reset as FallbackCompositionStateReset,
+} from './FallbackCompositionState';
 import SyntheticCompositionEvent from './SyntheticCompositionEvent';
 import SyntheticInputEvent from './SyntheticInputEvent';
 
@@ -246,10 +250,10 @@ function extractCompositionEvent(
     // The current composition is stored statically and must not be
     // overwritten while composition continues.
     if (!isComposing && eventType === eventTypes.compositionStart) {
-      isComposing = FallbackCompositionState.initialize(nativeEventTarget);
+      isComposing = FallbackCompositionStateInitialize(nativeEventTarget);
     } else if (eventType === eventTypes.compositionEnd) {
       if (isComposing) {
-        fallbackData = FallbackCompositionState.getData();
+        fallbackData = FallbackCompositionStateGetData();
       }
     }
   }
@@ -314,7 +318,7 @@ function getNativeBeforeInputChars(topLevelType: TopLevelType, nativeEvent) {
 
       // If it's a spacebar character, assume that we have already handled
       // it at the keypress level and bail immediately. Android Chrome
-      // doesn't give us keycodes, so we need to blacklist it.
+      // doesn't give us keycodes, so we need to ignore it.
       if (chars === SPACEBAR_CHAR && hasSpaceKeypress) {
         return null;
       }
@@ -346,8 +350,8 @@ function getFallbackBeforeInputChars(topLevelType: TopLevelType, nativeEvent) {
       (!canUseCompositionEvent &&
         isFallbackCompositionEnd(topLevelType, nativeEvent))
     ) {
-      const chars = FallbackCompositionState.getData();
-      FallbackCompositionState.reset();
+      const chars = FallbackCompositionStateGetData();
+      FallbackCompositionStateReset();
       isComposing = false;
       return chars;
     }
